@@ -2695,6 +2695,27 @@ textarea.ptext { flex: none; box-sizing: border-box; min-height: 96px; width: 10
 .pline .rb { position: relative; }
 .pline .pt { position: absolute; left: 100%; bottom: 0; white-space: nowrap; }
 .pline .a:has(.pt) { margin-right: 1em; }
+
+/* greetings, stars, badges */
+.panel.greet { display: flex; flex-direction: row; gap: 12px; align-items: flex-start; }
+.greet .gico { font-size: 30px; line-height: 1; flex: none; padding-top: 2px; }
+.greet .gmain { font-weight: 650; font-size: 16.5px; line-height: 1.35; }
+.greet .gfact { font-size: 14px; margin-top: 6px; }
+.greet input.gname, .sheet input.gname { flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--outline); background: var(--sheet); color: var(--ink); }
+.lvlchip { margin-top: 10px; display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: 650; font-size: 13.5px; }
+.lvlrow { display: flex; gap: 12px; align-items: center; }
+.lvlrow .lvlnum { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--on-accent); font-weight: 800; font-size: 20px; flex: none; }
+.lvlrow .bar { margin: 6px 0 4px; }
+.badges { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.badge { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 3px; padding: 10px 6px; border-radius: 12px; background: var(--sunk); opacity: .55; filter: grayscale(1); }
+.badge.on { opacity: 1; filter: none; background: var(--accent-soft); }
+.badge .bico { font-size: 28px; line-height: 1.1; }
+.badge .bname { font-size: 12.5px; font-weight: 650; line-height: 1.2; }
+.badge .bdesc { font-size: 11px; color: var(--muted); line-height: 1.25; }
+.praise { width: 100%; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+.praise .pline1 { font-size: 17px; font-weight: 650; }
+.praise .starsgot { font-size: 20px; font-weight: 800; color: #C2711A; }
+.praise .newb { width: 100%; }
 </style>
 <main id="app"><div id="view"></div></main>
 <nav class="tabbar" id="tabbar" aria-label="Разделы"></nav>
@@ -3570,7 +3591,7 @@ function startPhrases(lessons, len) {
   const ps = shuffle(PHRASES.filter(p => lessons.includes(p.lesson)));
   const q = [];
   for (let i = 0; i < len && ps.length; i++) q.push({ t: i % 3 === 2 ? 'plisten' : 'phrase', pid: ps[i % ps.length].id });
-  startSession(q, { title: t('Фразы') });
+  startSession(q, { title: t('Фразы'), extra: true });
 }
 function startTraining() {
   if (TR.mode === 'phrase') return startPhrases(TR.lessons, TR.len);
@@ -3590,7 +3611,7 @@ function startTraining() {
     q.push({ t: 'q', wid: w.id, sk: sk0 === 'write' && !canWrite(w) ? 'read' : sk0, variant: TR.mode === 'tones' ? 'py' : null });
   });
   if (TR.mode === 'mix') { const ps = shuffle(PHRASES.filter(p => TR.lessons.includes(p.lesson))).slice(0, 3); ps.forEach(p => q.splice(Math.floor(Math.random() * q.length), 0, { t: 'phrase', pid: p.id })); }
-  startSession(q, { title: t('Тренировка') });
+  startSession(q, { title: t('Тренировка'), extra: true });
 }
 
 function startSession(queue, meta) {
@@ -3668,6 +3689,7 @@ function answer(ok, opts = {}) {
   if (it.t === 'q') { grade(it.wid, it.sk, ok, S.hinted || opts.hinted); if (again) requeue(it); }
   else if (it.t === 'phrase' || it.t === 'plisten') { logPhrase(ok); if (again) requeue(it); }
   else if (it.t === 'g') logGame(ok);
+  starsOnAnswer(ok, it);
 }
 
 function optionButtons(items, cls) {
@@ -3881,6 +3903,7 @@ function showSummary() {
     <p>Сегодня ${d.a} ${plural(d.a, t('ответ'), t('ответа'), t('ответов'))} из цели ${P.settings.goal}. Серия: ${streak()} ${plural(streak(), t('день'), t('дня'), t('дней'))}.</p>
     <div class="row" style="width:100%"><button class="btn ghost grow" data-act="endsession">Готово</button>${dueList().length ? T`<button class="btn primary grow" data-act="daily">Ещё повторения</button>` : ''}</div>
   </div>`;
+  motivateSummary();
   clearTimeout(remote.timer); flushRemote();
 }
 
@@ -4799,6 +4822,7 @@ function testSummaryHTML(pct) {
   const passed = pct >= TEST_PASS;
   P.tests = P.tests || {};
   P.tests[n] = { best: Math.max(prev.best || 0, pct), last: pct, passed: Math.max(prev.best || 0, pct) >= TEST_PASS, day: TODAY };
+  starsOnTest(n, pct);
   touch();
   const wrong = [...new Set(S.wrong || [])].map(id => WBY[id]).filter(Boolean);
   return `<div class="testres ${passed ? 'ok' : 'bad'}">${passed ? T`Урок ${n} сдан` : T`Пока не сдан: нужно ${TEST_PASS}%`}</div>
@@ -4960,6 +4984,7 @@ function faqData() {
         `<p>В уроке нажмите «Задания в книгах». Для каждой книги — страницы и номер упражнения так, как он напечатан (一、二、三… — разделы и упражнения, (一)(二) и 1, 2, 3… — пункты внутри них), перевод и что делать. Кнопка ▸ открывает похожее задание в тренажёре. В списке игр тоже указана страница учебника.</p>`,
         `<p>In a lesson, tap “Exercises in the books”. For each book you'll see the pages and the exercise number as printed (一, 二, 三… are sections and exercises; (一)(二) and 1, 2, 3… are items inside them), a translation and what to do. The ▸ button opens a similar task in the trainer. The game list shows the textbook page too.</p>`) }
     ] },
+    motivFaqSection(),
     { sec: LX('Прогресс и устройства', 'Progress and devices'), items: [
       { id: 'sync', q: LX('Где хранится прогресс?', 'Where is my progress stored?'), a: LX(
         `<p>${remote.state === 'local' ? 'В этой версии — только в браузере этого устройства: на другом телефоне прогресс будет свой, а очистка данных браузера его удалит.' : 'В вашем аккаунте и копией на устройстве, поэтому он одинаковый на телефоне и компьютере.'} Состояние видно внизу главного экрана и в настройках.</p>
@@ -5007,6 +5032,7 @@ function wordProgressHTML(w) {
 // Links to the rules, added after a screen is drawn (the screens' own texts stay as they are, so their translations keep working)
 function faqDecorate(root) {
   parseDecorate(root);
+  motivateDecorate(root);
   root.querySelectorAll('.legend').forEach(lg => { if (!lg.querySelector('.faqlink')) lg.insertAdjacentHTML('beforeend', faqLink('levels')); });
   const tab = VIEW.tab;
   if (tab === 'home') {
@@ -5029,6 +5055,7 @@ function faqDecorate(root) {
 function faqSettings() {
   const h = document.querySelector('#sheetbg .sheet > .row');
   if (h) h.insertAdjacentHTML('afterend', `<button class="btn ghost block" data-act="faq">${LX('Вопросы и ответы: как всё считается', 'Questions and answers: how everything is counted')}</button>`);
+  motivateSettings();
 }
 
 document.addEventListener('click', e => {
@@ -5129,6 +5156,192 @@ document.addEventListener('click', e => {
   const a = e.target.closest('[data-act="parse"]'); if (!a) return;
   unlockTTS(); parseSheet();
 });
+
+/* ================= greetings, praise, stars, levels and badges ================= */
+// The mandatory part (today's session up to the daily goal) earns no stars — stars are for what you do beyond it.
+const STAR_CAP = 100; // stars per day from answers (bonuses for tests and streaks come on top)
+const LEVELS = [[0, 'Новичок', 'Beginner'], [50, 'Ученик', 'Student'], [150, 'Старательный', 'Diligent'], [300, 'Знаток', 'Expert'], [500, 'Мастер тонов', 'Tone master'],
+  [800, 'Каллиграф', 'Calligrapher'], [1200, 'Книжник', 'Bookworm'], [1700, 'Мудрец', 'Sage'], [2400, 'Мастер', 'Master'], [3300, 'Легенда', 'Legend']];
+function SX() { if (!P.stars || typeof P.stars !== 'object') P.stars = { total: 0, days: {}, ms: {} }; P.stars.days = P.stars.days || {}; P.stars.ms = P.stars.ms || {}; P.badges = P.badges || {}; P.gplayed = P.gplayed || {}; return P.stars; }
+function levelOf(total) {
+  let i = 0; while (i + 1 < LEVELS.length && total >= LEVELS[i + 1][0]) i++;
+  const cur = LEVELS[i], nx = LEVELS[i + 1];
+  return { n: i + 1, name: LX(cur[1], cur[2]), from: cur[0], to: nx ? nx[0] : null, next: nx ? LX(nx[1], nx[2]) : null };
+}
+function addStars(n, kind) {
+  const st = SX(), k = dayKey(TODAY);
+  if (kind === 'answer') { const had = st.days[k] || 0; n = Math.max(0, Math.min(n, STAR_CAP - had)); st.days[k] = had + n; }
+  if (!n) return 0;
+  st.total += n; if (S) S.stars = (S.stars || 0) + n;
+  touch(); return n;
+}
+function starsOnAnswer(ok, it) {
+  SX();
+  if (S.meta.game) P.gplayed[S.meta.game] = (P.gplayed[S.meta.game] || 0) + 1;
+  if (S.meta.test) return; // a test gives its bonus at the end
+  const d = P.days[dayKey(TODAY)] || { a: 0 };
+  const extra = S.meta.extra || S.meta.game || d.a > P.settings.goal;
+  if (ok && extra) addStars(it.sk === 'write' ? 2 : 1, 'answer');
+  const s = streak();
+  [[7, 20], [30, 100], [100, 300]].forEach(([m, b]) => { if (s >= m && !P.stars.ms['s' + m]) { P.stars.ms['s' + m] = TODAY; addStars(b, 'bonus'); } });
+}
+function starsOnTest(n, pct) {
+  SX();
+  if (pct >= TEST_PASS && !P.stars.ms['t' + n]) { P.stars.ms['t' + n] = TODAY; addStars(20, 'bonus'); }
+  if (pct === 100 && !P.stars.ms['t100_' + n]) { P.stars.ms['t100_' + n] = TODAY; addStars(40, 'bonus'); }
+}
+
+/* ---------- badges (worked out from the progress, so earlier work counts too) ---------- */
+function bestStreak() {
+  const ds = Object.keys(P.days).filter(k => (P.days[k] || {}).a > 0).map(k => Math.round(Date.parse(k) / 864e5)).sort((a, b) => a - b);
+  let best = 0, cur = 0, prev = null;
+  ds.forEach(d => { cur = prev !== null && d === prev + 1 ? cur + 1 : 1; best = Math.max(best, cur); prev = d; });
+  return best;
+}
+function skillSum(sk) { let n = 0; for (const d of Object.values(P.days)) { const v = (d.s || {})[sk]; if (v) n += v[1]; } return n; }
+function badgeList() {
+  SX();
+  const known = counts(), kw = known[2] + known[3], ch = charsKnown(), bs = bestStreak();
+  const tests = Object.values(P.tests || {}), passed = tests.filter(x => (x.best || 0) >= TEST_PASS).length;
+  const maxDay = Math.max(0, ...Object.values(P.days).map(d => d.a || 0));
+  const B = (id, icon, ru, en, dru, den, ok, have, need) => ({ id, icon, name: LX(ru, en), desc: LX(dru, den), ok, have: Math.min(have, need), need });
+  return [
+    B('streak3', '🔥', 'Три дня подряд', 'Three days in a row', 'Занимайтесь 3 дня без пропусков', 'Study 3 days without a gap', bs >= 3, bs, 3),
+    B('streak7', '🔥', 'Неделя без пропусков', 'A week without a gap', '7 дней подряд', '7 days in a row', bs >= 7, bs, 7),
+    B('streak30', '🏮', 'Месяц без пропусков', 'A month without a gap', '30 дней подряд', '30 days in a row', bs >= 30, bs, 30),
+    B('streak100', '🐉', 'Сто дней', 'A hundred days', '100 дней подряд', '100 days in a row', bs >= 100, bs, 100),
+    B('words10', '📗', 'Первые 10 слов', 'First 10 words', '10 слов на уровне «знаю»', '10 words “known”', kw >= 10, kw, 10),
+    B('words50', '📘', '50 слов', '50 words', '50 слов на уровне «знаю»', '50 words “known”', kw >= 50, kw, 50),
+    B('words100', '📙', '100 слов', '100 words', '100 слов на уровне «знаю»', '100 words “known”', kw >= 100, kw, 100),
+    B('wordsAll', '🏯', 'Все слова уроков 1–10', 'All words of lessons 1–10', `${MAINW.length} слов на уровне «знаю»`, `${MAINW.length} words “known”`, kw >= MAINW.length, kw, MAINW.length),
+    B('chars100', '字', 'Сто иероглифов', 'A hundred characters', '100 иероглифов в словах «знаю»', '100 characters in “known” words', ch >= 100, ch, 100),
+    B('strokes', '〰️', 'Все черты', 'All strokes', `Начаты все ${BSTR.length} черт`, `All ${BSTR.length} strokes started`, BSTR.every(bSeen), BSTR.filter(bSeen).length, BSTR.length),
+    B('radicals', '🧩', 'Все ключи', 'All radicals', `Начаты все ${BRAD.length} ключей`, `All ${BRAD.length} radicals started`, BRAD.every(bSeen), BRAD.filter(bSeen).length, BRAD.length),
+    B('write50', '🖌️', 'Каллиграф', 'Calligrapher', '50 верных ответов в письме', '50 correct writing answers', skillSum('write') >= 50, skillSum('write'), 50),
+    B('listen100', '🎧', 'Слух как у носителя', 'Native-like ear', '100 верных ответов на слух', '100 correct listening answers', skillSum('listen') >= 100, skillSum('listen'), 100),
+    B('test1', '🏆', 'Первая сданная проверка', 'First test passed', `Проверка урока на ${TEST_PASS}% и выше`, `A lesson test at ${TEST_PASS}% or more`, passed >= 1, passed, 1),
+    B('tests5', '🎓', 'Пять уроков сдано', 'Five lessons passed', '5 сданных проверок уроков', '5 lesson tests passed', passed >= 5, passed, 5),
+    B('test100', '💯', 'Без единой ошибки', 'Not a single mistake', 'Проверка урока на 100%', 'A lesson test at 100%', tests.some(x => x.best === 100), tests.some(x => x.best === 100) ? 1 : 0, 1),
+    B('games5', '🎮', 'Игрок', 'Player', '5 разных игр', '5 different games', Object.keys(P.gplayed).length >= 5, Object.keys(P.gplayed).length, 5),
+    B('day200', '⚡', 'Рекорд дня', 'Record day', '200 ответов за один день', '200 answers in one day', maxDay >= 200, maxDay, 200),
+    B('stars1000', '⭐', 'Тысяча звёзд', 'A thousand stars', '1000 звёзд за занятия сверх программы', '1000 stars for work beyond the programme', P.stars.total >= 1000, P.stars.total, 1000)
+  ];
+}
+function newBadges() {
+  const out = [];
+  badgeList().forEach(b => { if (b.ok && !P.badges[b.id]) { P.badges[b.id] = TODAY; out.push(b); } });
+  if (out.length) touch();
+  return out;
+}
+
+/* ---------- messages ---------- */
+function myName() { return (P.settings.name || '').trim(); }
+function daysSinceLast() { let d = TODAY - 1; for (let i = 0; i < 400; i++, d--) if ((P.days[dayKey(d)] || {}).a > 0) return TODAY - d; return null; }
+function factLine() {
+  const ch = charsKnown(), kw = counts(); const k = kw[2] + kw[3];
+  const ru = ['Каждый день по 20 минут — это больше 120 часов китайского за год.',
+    'Через год таких занятий будешь читать то, что большинству людей на планете кажется узорами.',
+    'Повторение через 1, 2, 4, 8 дней — так слово уходит в долгую память.',
+    'Короткие занятия каждый день работают лучше, чем одно длинное раз в неделю.',
+    ch ? `Ты уже знаешь ${ch} ${plural(ch, 'иероглиф', 'иероглифа', 'иероглифов')} — каждый следующий учить легче: ключи повторяются.` : 'Первые иероглифы — самые трудные. Дальше ключи начинают повторяться, и становится легче.',
+    k ? `На уровне «знаю» уже ${k} ${plural(k, 'слово', 'слова', 'слов')}. Это твой словарь — он растёт каждый день.` : 'Слово становится «знаю», когда ты вспомнил его в разные дни. Завтра первые слова уже засчитаются.'];
+  const en = ['20 minutes a day adds up to more than 120 hours of Chinese a year.',
+    'A year of this and you will read what looks like patterns to most people on the planet.',
+    'Reviews after 1, 2, 4 and 8 days are how a word moves into long-term memory.',
+    'Short sessions every day work better than one long one a week.',
+    ch ? `You already know ${ch} ${ch === 1 ? 'character' : 'characters'} — each new one is easier: radicals repeat.` : 'The first characters are the hardest. Then radicals start repeating and it gets easier.',
+    k ? `${k} ${k === 1 ? 'word is' : 'words are'} already “known”. That's your vocabulary — it grows every day.` : 'A word becomes “known” when you recall it on different days. Tomorrow your first words will count.'];
+  const i = TODAY % ru.length; return LX(ru[i], en[i]);
+}
+function greetingHTML() {
+  const nm = myName();
+  if (!nm) return `<section class="panel greet"><div class="gico">👋</div><div class="grow"><div class="gmain">${LX('Как тебя зовут?', 'What\'s your name?')}</div>
+    <div class="muted">${LX('Тренажёр будет обращаться к тебе по имени — здороваться, напоминать и хвалить.', 'The trainer will call you by name — to greet, remind and praise you.')}</div>
+    <div class="row" style="margin-top:8px"><input class="gname" type="text" maxlength="30" placeholder="${LX('Имя', 'Name')}" aria-label="${LX('Имя', 'Name')}"><button class="btn primary small" data-act="setname">${LX('Готово', 'Done')}</button></div></div></section>`;
+  const h = new Date().getHours(), d = P.days[dayKey(TODAY)] || { a: 0, n: 0 }, goal = P.settings.goal, st = streak(), due = dueList().length, gap = daysSinceLast();
+  const tod = h >= 5 && h < 12 ? ['☀️', LX('доброе утро', 'good morning'), LX('хорошего дня', 'a good day')] : h < 17 ? ['🌤️', LX('добрый день', 'good afternoon'), LX('хорошего дня', 'a good day')] : h < 23 ? ['🌙', LX('добрый вечер', 'good evening'), LX('хорошего вечера', 'a good evening')] : ['🌌', LX('доброй ночи', 'good night'), LX('спокойной ночи', 'a good night')];
+  let ico = tod[0], main;
+  if (d.a === 0 && gap !== null && gap >= 3) { ico = '🤗'; main = LX(`${nm}, с возвращением! Начнём с повторения — так слова быстрее вспомнятся.`, `${nm}, welcome back! Let's start with reviews — the words come back faster that way.`); }
+  else if (d.a === 0) main = LX(`${nm}, ${tod[1]}! Китайский Original желает тебе ${tod[2]}. Не забудь сегодня позаниматься${st ? ` — серия ${st} ${plural(st, 'день', 'дня', 'дней')} подряд, не прерывай её` : due ? ` — тебя ждут ${due} ${plural(due, 'карточка', 'карточки', 'карточек')}` : ''}.`,
+    `${nm}, ${tod[1]}! Chinese Original wishes you ${tod[2]}. Don't forget to study today${st ? ` — a ${st}-day streak, don't break it` : due ? ` — ${due} ${due === 1 ? 'card is' : 'cards are'} waiting` : ''}.`);
+  else if (d.a < goal) { ico = '💪'; main = LX(`${nm}, уже ${d.a} из ${goal}. Ещё ${goal - d.a} — и цель дня закрыта.`, `${nm}, ${d.a} of ${goal} done. ${goal - d.a} more and today's goal is reached.`); }
+  else { ico = '🏆'; main = LX(`${nm}, ты красавчик! Цель дня закрыта: ${d.a} ${plural(d.a, 'ответ', 'ответа', 'ответов')}${d.n ? `, ${d.n} ${plural(d.n, 'новое слово', 'новых слова', 'новых слов')}` : ''}. Всё, что сверх цели, приносит звёзды ★.`,
+    `${nm}, you're a star! Today's goal is reached: ${d.a} ${d.a === 1 ? 'answer' : 'answers'}${d.n ? `, ${d.n} new ${d.n === 1 ? 'word' : 'words'}` : ''}. Everything beyond the goal earns stars ★.`); }
+  const lv = levelOf(SX().total);
+  return `<section class="panel greet"><div class="gico">${ico}</div><div class="grow"><div class="gmain">${esc(main)}</div><div class="muted gfact">${esc(factLine())}</div>
+    <button class="lvlchip" data-act="tab" data-tab="progress">★ ${P.stars.total} · ${esc(lv.name)}</button></div></section>`;
+}
+function praiseLine(pct) {
+  const nm = myName(), who = nm ? nm + ', ' : '';
+  if (pct >= 90) return LX(`${who}ты красавчик! Почти без ошибок.`, `${who}you're a star! Almost no mistakes.`);
+  if (pct >= 70) return LX(`${who}хорошая работа! Ошибки вернутся на повторение — и закрепятся.`, `${who}good work! The mistakes come back for review and will stick.`);
+  return LX(`${who}ошибки — это нормально: эти слова вернутся завтра, и станет легче. Главное — ты сегодня занимался.`, `${who}mistakes are normal: these words come back tomorrow and it gets easier. What matters is that you studied today.`);
+}
+function badgeHTML(b) {
+  return `<div class="badge ${b.ok ? 'on' : ''}"><span class="bico" data-nopy>${b.icon}</span><span class="bname">${esc(b.name)}</span><span class="bdesc">${esc(b.desc)}${b.ok ? '' : ` · ${b.have}/${b.need}`}</span></div>`;
+}
+function starsPanelHTML() {
+  const tot = SX().total, lv = levelOf(tot), bl = badgeList(), got = bl.filter(b => b.ok).length;
+  const pct = lv.to ? Math.round((tot - lv.from) / (lv.to - lv.from) * 100) : 100;
+  return `<section class="panel stars"><div class="sec-h"><h2>${LX('Звёзды и значки', 'Stars and badges')}</h2>${faqLink('stars', LX('За что даются?', 'How are they earned?'))}</div>
+    <div class="lvlrow"><span class="lvlnum">${lv.n}</span><div class="grow"><b>${esc(lv.name)}</b> · ★ ${tot}<div class="bar"><i class="k2" style="width:${pct}%"></i></div>
+    <span class="muted small">${lv.to ? LX(`До уровня «${lv.next}»: ${lv.to - tot} ★`, `To “${lv.next}”: ${lv.to - tot} ★`) : LX('Высший уровень!', 'Top level!')} · ${LX('сегодня', 'today')} ★ ${P.stars.days[dayKey(TODAY)] || 0} / ${STAR_CAP}</span></div></div>
+    <div class="muted small">${LX(`Значки: ${got} из ${bl.length}`, `Badges: ${got} of ${bl.length}`)}</div>
+    <div class="badges">${bl.map(badgeHTML).join('')}</div></section>`;
+}
+function motivateSummary() {
+  const box = $('#sbody .summary'); if (!box || !S) return;
+  const pct = S.a ? Math.round(S.c / S.a * 100) : 100, nb = newBadges(), lv = levelOf(SX().total);
+  const html = `<div class="praise"><div class="pline1">${esc(praiseLine(pct))}</div>
+    ${S.stars ? `<div class="starsgot">+${S.stars} ★ <span class="muted">· ${esc(lv.name)} · ★ ${P.stars.total}</span></div>` : `<div class="muted small">${LX('Звёзды дают за занятия сверх цели дня, тренировку и игры.', 'Stars are given for work beyond the daily goal, practice and games.')}</div>`}
+    ${nb.length ? `<div class="newb"><b>${LX('Новый значок!', 'New badge!')}</b><div class="badges">${nb.map(badgeHTML).join('')}</div></div>` : ''}</div>`;
+  const big = box.querySelector('.big + p') || box.querySelector('.big');
+  if (big) big.insertAdjacentHTML('afterend', html); else box.insertAdjacentHTML('beforeend', html);
+}
+function motivateDecorate(root) {
+  if (VIEW.tab === 'home') {
+    const h = root.querySelector('header.top');
+    if (h && !root.querySelector('.greet')) { newBadges(); h.insertAdjacentHTML('afterend', greetingHTML()); }
+  }
+  if (VIEW.tab === 'progress') {
+    const first = root.querySelector('section.panel');
+    if (first && !root.querySelector('.panel.stars')) first.insertAdjacentHTML('afterend', starsPanelHTML());
+  }
+}
+function motivateSettings() {
+  const sheet = document.querySelector('#sheetbg .sheet'); if (!sheet) return;
+  const anchor = sheet.querySelector('[data-act="faq"]') || sheet.querySelector('.row');
+  anchor.insertAdjacentHTML('afterend', `<div class="field"><span>${LX('Как к тебе обращаться', 'What to call you')}</span><div class="row"><input class="gname grow" type="text" maxlength="30" value="${esc(myName())}" placeholder="${LX('Имя', 'Name')}"><button class="btn ghost small" data-act="setname">${LX('Сохранить', 'Save')}</button></div><small>${LX('Имя в приветствиях, напоминаниях и похвале.', 'Your name in greetings, reminders and praise.')}</small></div>`);
+}
+function motivFaqSection() {
+  return { sec: LX('Звёзды, уровни и значки', 'Stars, levels and badges'), items: [
+    { id: 'stars', q: LX('За что дают звёзды?', 'What are stars for?'), a: LX(
+      `<p>Обязательная часть — «Занятие дня» до цели дня — звёзд не даёт: это просто учёба. Звёзды — за то, что сверх неё:</p>
+      <ul><li>каждый верный ответ после того, как цель дня (${P.settings.goal}) закрыта, — ★ (письмо — ★★);</li>
+      <li>каждый верный ответ в тренировке, фразах и играх — ★ (письмо — ★★);</li>
+      <li>сданная проверка урока — 20 ★, на 100% — ещё 40 ★ (один раз за урок);</li>
+      <li>серия 7 / 30 / 100 дней подряд — 20 / 100 / 300 ★.</li></ul>
+      <p>За ответы — не больше ${STAR_CAP} ★ в день, чтобы нельзя было накрутить.</p>`,
+      `<p>The mandatory part — today's session up to the daily goal — gives no stars: that's just studying. Stars are for what you do beyond it:</p>
+      <ul><li>each correct answer after the daily goal (${P.settings.goal}) is reached — ★ (writing — ★★);</li>
+      <li>each correct answer in practice, phrases and games — ★ (writing — ★★);</li>
+      <li>a passed lesson test — 20 ★, at 100% another 40 ★ (once per lesson);</li>
+      <li>a streak of 7 / 30 / 100 days — 20 / 100 / 300 ★.</li></ul>
+      <p>Answers give at most ${STAR_CAP} ★ a day, so they can't be farmed.</p>`) },
+    { id: 'levels2', q: LX('Какие бывают уровни и значки?', 'What levels and badges are there?'), a: LX(
+      `<p>Уровни по сумме звёзд: ${LEVELS.map(l => `${l[1]} (${l[0]})`).join(' → ')}.</p><p>Значки — за достижения: серии дней, слова и иероглифы на уровне «знаю», все черты и ключи, письмо и слух, сданные проверки, игры, рекорд дня. Значки считаются по всему вашему прогрессу, поэтому прошлые занятия тоже засчитываются. Все значки — на вкладке «Прогресс».</p>`,
+      `<p>Levels by total stars: ${LEVELS.map(l => `${l[2]} (${l[0]})`).join(' → ')}.</p><p>Badges are for achievements: streaks, “known” words and characters, all strokes and radicals, writing and listening, passed tests, games, a record day. Badges are worked out from all your progress, so earlier sessions count too. All badges are on the Progress tab.</p>`) }
+  ] };
+}
+document.addEventListener('click', e => {
+  const a = e.target.closest('[data-act="setname"]'); if (!a) return;
+  const inp = a.parentElement.querySelector('.gname'); const v = (inp && inp.value || '').trim().slice(0, 30);
+  if (!v) { if (inp) inp.focus(); return; }
+  P.settings.name = v; touch();
+  if ($('#sheetbg')) { a.textContent = LX('Сохранено', 'Saved'); setTimeout(() => { a.textContent = LX('Сохранить', 'Save'); }, 1200); }
+  if (!S) { const y = window.scrollY; render(); window.scrollTo(0, y); }
+});
+document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.classList && e.target.classList.contains('gname')) { const b = e.target.parentElement.querySelector('[data-act="setname"]'); if (b) b.click(); } });
 
 
 /* ================= events ================= */
