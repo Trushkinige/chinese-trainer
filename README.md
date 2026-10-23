@@ -5,3 +5,5 @@
 Кнопка EN на главном экране — английская версия.
 
 Порядок черт — Make Me a Hanzi / hanzi-writer-data (Arphic Public License); письмо иероглифов — Hanzi Writer (MIT).
+
+Логотип «Идея!» — клуба «Идея». Надпись набрана шрифтом Bad Script (SIL Open Font License 1.1) и переведена в кривые.
