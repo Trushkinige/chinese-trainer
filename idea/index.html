@@ -2756,6 +2756,16 @@ textarea.ptext { flex: none; box-sizing: border-box; min-height: 96px; width: 10
 .top.tb2 { flex-wrap: wrap; row-gap: 10px; }
 .top.tb2 .topbtns { order: 5; flex-basis: 100%; display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
 .top.tb2 > .grow { flex: 1 1 0; min-width: 0; }
+/* translations in practice sessions */
+.session .ztr { font-family: var(--font-ui); font-size: 13.5px; line-height: 1.4; font-weight: 500; letter-spacing: 0; text-transform: none; }
+.opt .ztr.zopt { display: block; width: fit-content; margin: 5px 0 0; text-align: left; }
+.opt.hzopt .ztr.zopt { margin: 4px auto 0; text-align: center; }
+.s-kind .ztr { display: inline-block; margin: 4px 0 0 6px; }
+.prompt .ztr.zctx { display: inline-block; margin: 2px 0 0 6px; vertical-align: middle; }
+.routine .hz .ztr, .receipt .hz .ztr, .ddlg .dl .ztr { display: inline-block; margin-left: 6px; }
+.fb .ztr.zfb { display: inline-block; width: fit-content; margin-top: 4px; }
+.zhint { align-self: center; }
+.s-top .ztog { min-height: 30px; padding: 2px 8px; font-size: 11.5px; }
 </style>
 <main id="app"><div id="view"></div></main>
 <nav class="tabbar" id="tabbar" aria-label="Разделы"></nav>
@@ -4275,7 +4285,7 @@ const GAMES = {
       const mode = pick(['tag', 'tag', 'ear', 'sum']);
       const rp = () => pick([rnd(1, 20) * 100, rnd(1, 99) * 10, rnd(100, 2000), rnd(1, 9) * 100 + rnd(1, 9) * 10, rnd(1, 99) * 10 + 5]);
       if (mode === 'sum') {
-        const items = sample(GD.measures.filter(m => ['斤', '个', '瓶', '杯', '本', '支'].includes(m[1])), 2).map(m => ({ m, c: rnd(1, 3), p: rnd(2, 12) * 50 }));
+        const items = sample(GD.measures.filter(m => ['斤', '个', '瓶', '杯', '本', '支'].includes(m[1]) && !['人', '学生', '朋友'].includes(m[0])), 2).map(m => ({ m, c: rnd(1, 3), p: rnd(2, 12) * 50 }));
         const tot = items.reduce((s, x) => s + x.c * x.p, 0), z = moneyZh(tot);
         const wr = sample([tot + 50, tot - 50, tot + 100, tot + 10, tot - 100].filter(x => x > 0 && x !== tot), 3);
         const mc = mcFrom(zhOpt(z[0], z[1]), wr.map(x => zhOpt(moneyZh(x)[0], moneyZh(x)[1])));
@@ -4369,7 +4379,7 @@ const GAMES = {
       const right = `这是${ow[0]}的${o[0]}。`;
       const wr = [`这是${ow[0]}${o[0]}的。`, `这是${o[0]}的${ow[0]}。`, `这是${other[0]}的${o[0]}。`];
       const mc = mcFrom(zhOpt(right), wr.map(x => zhOpt(x)));
-      return Object.assign(mc, { label: t('Как сказать по-китайски?'), prompt: `<span class="emoji">${o[2]}</span><span class="ru-big">${LANG === 'en' || ['my', 'your'].includes(ow[2]) ? T`Это ${ownerRu(ow, o)} ${o[3]}.` : T`Это ${o[3]} ${ownerRu(ow, o)}.`}</span>`, after: after(right, '', ''), sayAfter: right });
+      return Object.assign(mc, { label: t('Как сказать по-китайски?'), prompt: `<span class="emoji">${o[2]}</span><span class="ru-big">${LANG === 'en' || ['my', 'your'].includes(ow[2]) || ['他', '她'].includes(ow[0]) ? T`Это ${ownerRu(ow, o)} ${o[3]}.` : T`Это ${o[3]} ${ownerRu(ow, o)}.`}</span>`, after: after(right, '', ''), sayAfter: right });
     }
   },
   yedou: {
@@ -4429,6 +4439,7 @@ function startGame(id, extra) {
   const G = GAMES[id];
   if (id === 'speed') return startSession([{ t: 'speed' }], { title: G.name, game: id });
   if (id === 'sudoku') return startSession([{ t: 'g', g: 'sudoku' }, { t: 'g', g: 'sudoku' }], { title: G.name, game: id });
+  if (!TR.lessons) { const s = new Set(W.filter(w => P.seen[w.id]).map(w => w.lesson)); TR.lessons = s.size ? [...s] : [1]; } // a game opened from a lesson, before the Practice tab
   const n = 10, ctx = Object.assign({}, extra || {});
   if (G.init) G.init(ctx);
   startSession(Array.from({ length: n }, () => ({ t: 'g', g: id, ctx })), { title: G.name, game: id });
@@ -5034,9 +5045,11 @@ function faqData() {
         <p>Перевод — по словам, не машинный перевод всей фразы. Слова, которых ещё нет в уроках 1–10, будут только с пиньинем.</p>`,
         `<p>Practice → “Break down a sentence from the book” (or Lessons → Reference). Copy the line with the iPhone camera (the Live Text button) and paste it: the trainer shows pinyin over every character, reads the sentence aloud and translates, in order, every word that is in lessons 1–10. Tap a word to open its card with your progress.</p>
         <p>The translation goes word by word; it is not a machine translation of the whole sentence. Words that aren't in lessons 1–10 yet get pinyin only.</p>`) },
-      { id: 'ztr', q: LX('Как понять примеры в теории?', 'How do I understand the examples in the grammar?'), a: LX(
-        `<p>В уроке → «Теория» у каждого китайского примера рядом стоит перевод (в цветной плашке), если в самом тексте его нет. Сегодняшняя дата на главном экране — тоже с переводом. Кнопка «перевод» вверху каждого экрана, рядом с «pīnyīn» (в теории — ещё и внизу справа), прячет и показывает все эти переводы — например, чтобы проверить себя. Выбор запоминается. Нажмите на пример — он прозвучит.</p>`,
-        `<p>In a lesson → Theory, every Chinese example gets its translation next to it (in a coloured tag) unless the text already gives it. Today's date on the home screen has a translation too. The “translation” button at the top of every screen, next to “pīnyīn” (and in the grammar also at the bottom right), hides and shows all of them, for example to test yourself. Your choice is remembered. Tap an example to hear it.</p>`) },
+      { id: 'ztr', q: LX('Как понять китайские фразы? (перевод)', 'How do I understand the Chinese sentences? (translation)'), a: LX(
+        `<p>В уроке → «Теория» у каждого китайского примера рядом стоит перевод (в цветной плашке), если в самом тексте его нет. Сегодняшняя дата на главном экране — тоже с переводом. Кнопка «перевод» вверху каждого экрана, рядом с «pīnyīn» (в теории — ещё и внизу справа), прячет и показывает все эти переводы — например, чтобы проверить себя. Выбор запоминается. Нажмите на пример — он прозвучит.</p>
+        <p><b>В тренировке и играх</b> вопрос и подписи (диалог, чек, расписание, месяц в календаре) переведены сразу, а варианты ответа — после ответа: до него перевод выдал бы ответ. Если совсем непонятно, нажмите «Подсказка: перевод вариантов» под вариантами — ответ тогда засчитывается, но без звезды.</p>`,
+        `<p>In a lesson → Theory, every Chinese example gets its translation next to it (in a coloured tag) unless the text already gives it. Today's date on the home screen has a translation too. The “translation” button at the top of every screen, next to “pīnyīn” (and in the grammar also at the bottom right), hides and shows all of them, for example to test yourself. Your choice is remembered. Tap an example to hear it.</p>
+        <p><b>In practice and games</b> the question and the context (a dialogue, a receipt, a timetable, the calendar month) are translated straight away, the answer options only after you answer: before that the translation would give the answer away. If you are stuck, tap “Hint: translate the options” under them — the answer still counts, but earns no star.</p>`) },
       { id: 'tasks', q: LX('Где упражнение в учебнике?', 'Where is an exercise in the textbook?'), a: LX(
         `<p>В уроке нажмите «Задания в книгах». Для каждой книги — страницы и номер упражнения так, как он напечатан (一、二、三… — разделы и упражнения, (一)(二) и 1, 2, 3… — пункты внутри них), перевод и что делать. В списке игр тоже указана страница учебника.</p>
         <p><b>Кнопки ▸ под упражнением</b> — тренировка того же навыка на словах этого урока: на слух тон, инициаль, финаль; пиньинь; вставить слово; составить предложение; подобрать ответ; вопросы к диалогу; преобразовать фразу; сказать о себе по образцу. Примеры свои, не из учебника, но в них есть все слова урока и несколько новых — учитель спрашивает по словам урока, и вы их встретите в разных фразах.</p>
@@ -5247,7 +5260,7 @@ function starsOnAnswer(ok, it) {
   if (S.meta.test) return; // a test gives its bonus at the end
   const d = P.days[dayKey(TODAY)] || { a: 0 };
   const extra = S.meta.extra || S.meta.game || d.a > P.settings.goal;
-  if (ok && extra) addStars(it.sk === 'write' ? 2 : 1, 'answer');
+  if (ok && extra && !S.hinted) addStars(it.sk === 'write' ? 2 : 1, 'answer'); // a hinted answer earns no star
   const s = streak();
   [[7, 20], [30, 100], [100, 300]].forEach(([m, b]) => { if (s >= m && !P.stars.ms['s' + m]) { P.stars.ms['s' + m] = TODAY; addStars(b, 'bonus'); } });
 }
@@ -5387,13 +5400,13 @@ function motivFaqSection() {
       <li>каждый верный ответ в тренировке, фразах и играх — ★ (письмо — ★★);</li>
       <li>сданная проверка урока — 20 ★, на 100% — ещё 40 ★ (один раз за урок);</li>
       <li>серия 7 / 30 / 100 дней подряд — 20 / 100 / 300 ★.</li></ul>
-      <p>За ответы — не больше ${STAR_CAP} ★ в день, чтобы нельзя было накрутить.</p>`,
+      <p>За ответы — не больше ${STAR_CAP} ★ в день, чтобы нельзя было накрутить. Ответ с подсказкой (пиньинь, перевод вариантов) звезды не даёт.</p>`,
       `<p>The mandatory part — today's session up to the daily goal — gives no stars: that's just studying. Stars are for what you do beyond it:</p>
       <ul><li>each correct answer after the daily goal (${P.settings.goal}) is reached — ★ (writing — ★★);</li>
       <li>each correct answer in practice, phrases and games — ★ (writing — ★★);</li>
       <li>a passed lesson test — 20 ★, at 100% another 40 ★ (once per lesson);</li>
       <li>a streak of 7 / 30 / 100 days — 20 / 100 / 300 ★.</li></ul>
-      <p>Answers give at most ${STAR_CAP} ★ a day, so they can't be farmed.</p>`) },
+      <p>Answers give at most ${STAR_CAP} ★ a day, so they can't be farmed. An answer given with a hint (pinyin, translated options) earns no star.</p>`) },
     { id: 'levels2', q: LX('Какие бывают уровни и значки?', 'What levels and badges are there?'), a: LX(
       `<p>Уровни по сумме звёзд: ${LEVELS.map(l => `${l[1]} (${l[0]})`).join(' → ')}.</p><p>Значки — за достижения: серии дней, слова и иероглифы на уровне «знаю», все черты и ключи, письмо и слух, сданные проверки, игры, рекорд дня. Значки считаются по всему вашему прогрессу, поэтому прошлые занятия тоже засчитываются. Все значки — на вкладке «Прогресс».</p>`,
       `<p>Levels by total stars: ${LEVELS.map(l => `${l[2]} (${l[0]})`).join(' → ')}.</p><p>Badges are for achievements: streaks, “known” words and characters, all strokes and radicals, writing and listening, passed tests, games, a record day. Badges are worked out from all your progress, so earlier sessions count too. All badges are on the Progress tab.</p>`) }
@@ -5717,6 +5730,200 @@ document.addEventListener('click', e => {
   const sh = $('.sheet'), st = sh ? sh.scrollTop : 0;
   settingsSheet(); if ($('.sheet')) $('.sheet').scrollTop = st; render();
 });
+
+/* ================= translation inside practice sessions =================
+   Chinese questions and context lines (a dialogue, a receipt, a timetable, the calendar month) get their translation
+   while you answer; the answer options get theirs only after you answer — before that the translation would give the
+   answer away. The «Подсказка: перевод вариантов» button shows them earlier (the answer then counts as hinted: no star,
+   and a word card does not move up). All of it follows the «перевод» button. */
+const ZT = new Map();
+const ztKey = s => String(s || '').replace(/[\s ]+/g, '');
+function ztPut(hz, tr) {
+  if (!hz || !tr) return;
+  const k = ztKey(hz); if (!k) return;
+  if (!ZT.has(k)) ZT.set(k, tr);
+  const k2 = k.replace(/[。？！.!?，,]+$/, ''); if (k2 && !ZT.has(k2)) ZT.set(k2, tr);
+}
+(function () {
+  const L = x => x ? LX(x.ru || '', x.en || x.ru || '') : '';
+  // the games' own words first: 上课 in the timetable is «идёт на занятия», not the classroom phrase «Начинаем урок!»
+  GD.places.forEach(p => ztPut(p[0], p[2]));
+  GD.routine.forEach(r => ztPut(r[0], r[2]));
+  GD.objects.forEach(o => ztPut(o[0], o[3]));
+  ztPut('门', LX('счётное слово для учебных предметов', 'measure word for school subjects')); // in the measure-word game
+  PHRASES.forEach(p => ztPut(p.hz, p.ru));
+  Object.values(PRACTICE).forEach(p => {
+    (p.sent || []).forEach(s => ztPut(s.hz, s.ru));
+    (p.dlg || []).forEach(d => (d.lines || []).forEach(l => ztPut(l.hz, l.ru)));
+    (p.retell || []).forEach(x => ztPut(x.r, x.ru));
+  });
+  Object.values(DR.sets).forEach(set => Object.values(set).forEach(items => items.forEach(it => {
+    if (it.hz && (it.ru || it.en) && !it.e) ztPut(it.hz, L(it));
+    if (it.e && it.ans) ztPut(it.ans, L(it));
+    if (it.q) ztPut(it.q.hz, L(it.q));
+    if (it.a) ztPut(it.a.hz, L(it.a));
+    if (it.base) ztPut(it.base.hz, L(it.base));
+  })));
+  Object.values(DR.dlg).forEach(ds => ds.forEach(d => d.lines.forEach(l => ztPut(l.hz, L(l)))));
+  Object.entries(ZTR).forEach(([k, v]) => ztPut(k, LX(v.ru, v.en)));
+  GD.yedou.forEach(x => ztPut(x[3], x[5]));
+  GD.abua.forEach(x => { const obj = { 去: '公园', 喝: '茶', 买: '苹果', 是: '老师' }[x[2]] || ''; ztPut(`${x[1]}${x[2]}不${x[2]}${obj}？`, x[3]); });
+  ['早上好', '上午好', '下午好', '晚上好'].forEach((g, i) => ztPut(g + '！', LX(['Доброе утро!', 'Доброе утро! (до полудня)', 'Добрый день!', 'Добрый вечер!'][i], ['Good morning!', 'Good morning! (before noon)', 'Good afternoon!', 'Good evening!'][i])));
+  const MW = new Set(GD.measures.map(m => m[1]));
+  PDICT.forEach((ws, k) => ztPut(k, ((MW.has(k) && ws.find(w => /счётн|measure/i.test(w.ru))) || ws[0]).ru)); // 张 here is the measure word, not the surname
+})();
+
+/* ---------- numbers, dates, times, money said in Chinese ---------- */
+const CNV = { 零: 0, 〇: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+function cnNum(s) {
+  if (!s || !/^[零〇一二两三四五六七八九十百千]+$/.test(s)) return null;
+  let total = 0, cur = 0;
+  for (const c of s) { if (c in CNV) cur = CNV[c]; else { total += (cur || 1) * { 十: 10, 百: 100, 千: 1000 }[c]; cur = 0; } }
+  return total + cur;
+}
+const MON = [['январь', 'января', 'January'], ['февраль', 'февраля', 'February'], ['март', 'марта', 'March'], ['апрель', 'апреля', 'April'], ['май', 'мая', 'May'], ['июнь', 'июня', 'June'], ['июль', 'июля', 'July'], ['август', 'августа', 'August'], ['сентябрь', 'сентября', 'September'], ['октябрь', 'октября', 'October'], ['ноябрь', 'ноября', 'November'], ['декабрь', 'декабря', 'December']];
+const WDN = { 一: ['понедельник', 'Monday'], 二: ['вторник', 'Tuesday'], 三: ['среда', 'Wednesday'], 四: ['четверг', 'Thursday'], 五: ['пятница', 'Friday'], 六: ['суббота', 'Saturday'], 日: ['воскресенье', 'Sunday'], 天: ['воскресенье', 'Sunday'] };
+const WHO_DAY = { 今天: ['Сегодня', 'Today is'], 明天: ['Завтра', 'Tomorrow is'], 昨天: ['Вчера было', 'Yesterday was'], 后天: ['Послезавтра', 'The day after tomorrow is'] };
+const DAYPART = { 早上: ['утра', 'in the morning'], 上午: ['утра', 'in the morning'], 中午: ['дня', 'at noon'], 下午: ['дня', 'in the afternoon'], 晚上: ['вечера', 'in the evening'] };
+const NAMES = { 安娜: ['Анна', 'Anna', 'Анны'], 伊万: ['Иван', 'Ivan', 'Ивана'], 王明: ['Ван Мин', 'Wang Ming', 'Ван Мина'] };
+const PRON = { 他: ['он', 'he'], 她: ['она', 'she'] };
+const DIRS = { 北边: ['к северу от', 'north of'], 南边: ['к югу от', 'south of'], 东边: ['к востоку от', 'east of'], 西边: ['к западу от', 'west of'] };
+const cap = s => s ? s[0].toUpperCase() + s.slice(1) : s;
+function cnTime(s) {
+  const r = /^(早上|上午|中午|下午|晚上)?(.+)$/.exec(s); if (!r) return null;
+  const part = r[1] || '', t = r[2]; let m;
+  if ((m = /^差(.+?)(分|刻)(.+?)点$/.exec(t))) {
+    const a = cnNum(m[1]), h = cnNum(m[3]); if (a == null || h == null) return null;
+    return { h: h - 1 || 12, m: 60 - (m[2] === '刻' ? a * 15 : a), part };
+  }
+  if ((m = /^(.+?)点(.*)$/.exec(t))) {
+    const h = cnNum(m[1]); if (h == null || h > 24) return null;
+    const rest = m[2]; let mm;
+    if (!rest) mm = 0; else if (rest === '半') mm = 30; else if (/^.刻$/.test(rest)) mm = cnNum(rest[0]) * 15; else mm = cnNum(rest.replace(/分$/, ''));
+    if (mm == null || mm > 59) return null;
+    return { h, m: mm, part };
+  }
+  return null;
+}
+const tStr = t => `${t.h}:${String(t.m).padStart(2, '0')}` + (t.part ? ' ' + LX(DAYPART[t.part][0], DAYPART[t.part][1]) : '');
+function cnMoney(s) {
+  const m0 = /^(一共)?(.*)$/.exec(s), tot = !!m0[1]; let t = m0[2], x, y = 0, j = 0, f = 0;
+  if (!/[块元毛分]/.test(t)) return null;
+  if ((x = /^(.+?)[块元](.*)$/.exec(t))) {
+    y = cnNum(x[1]); t = x[2];
+    if (t && !/[毛分]/.test(t)) { if (t[0] === '零') f = cnNum(t.slice(1)); else j = cnNum(t); t = ''; }
+  }
+  if ((x = /^(.+?)毛(.*)$/.exec(t))) { j = cnNum(x[1]); t = x[2]; if (t && !/分/.test(t)) { f = cnNum(t); t = ''; } }
+  if ((x = /^(.+?)分$/.exec(t))) { f = cnNum(x[1]); t = ''; }
+  if (t || [y, j, f].some(v => v == null)) return null;
+  const v = '¥' + (y + j / 10 + f / 100).toFixed(2);
+  return tot ? LX(`Всего ${v}`, `Total ${v}`) : v;
+}
+// Translation of a Chinese line, or '' when it is not known (wrong answer options usually are not).
+function zt(s0) {
+  const s = ztKey(s0); if (!s || !/[㐀-鿿]/.test(s)) return '';
+  const core = s.replace(/[。？！.!?]+$/, '');
+  const n = cnNum(core); if (n != null) return String(n); // numbers as digits, always
+  if (ZT.has(s)) return ZT.get(s);
+  if (ZT.has(core)) return ZT.get(core);
+  let m, t;
+  if ((m = /^(今天|明天|昨天|后天)?(.+?)月(.+?)号[，,]?(?:星期([一二三四五六日天]))?$/.exec(core))) {
+    const mo = cnNum(m[2]), d = cnNum(m[3]); if (mo && d && mo <= 12 && d <= 31) {
+      const w = m[4] ? WDN[m[4]] : null, who = m[1] ? WHO_DAY[m[1]] : null;
+      return LX(`${who ? who[0] + ' ' : ''}${d} ${MON[mo - 1][1]}${w ? ', ' + w[0] : ''}.`, `${who ? who[1] + ' ' : ''}${w ? w[1] + ', ' : ''}${d} ${MON[mo - 1][2]}.`);
+    }
+  }
+  if ((m = /^(.+?)月$/.exec(core)) && cnNum(m[1]) >= 1 && cnNum(m[1]) <= 12) return LX(cap(MON[cnNum(m[1]) - 1][0]), MON[cnNum(m[1]) - 1][2]);
+  const mon = cnMoney(core); if (mon) return mon;
+  if ((m = /^现在(.+)$/.exec(core)) && (t = cnTime(m[1]))) return LX(`Сейчас ${tStr(t)}.`, `It's ${tStr(t)} now.`);
+  if ((t = cnTime(core))) return tStr(t);
+  // the daily-routine game
+  if ((m = /^(安娜|伊万|王明)的一天$/.exec(core))) return LX(`Один день ${NAMES[m[1]][2]}`, `${NAMES[m[1]][1]}'s day`);
+  for (const r of GD.routine) {
+    if (!core.endsWith(r[0])) continue;
+    const pre = core.slice(0, -r[0].length);
+    if ((m = /^(安娜|伊万|王明)(.+)$/.exec(pre)) && (t = cnTime(m[2]))) return LX(`${NAMES[m[1]][0]} ${r[2]} в ${tStr(t)}.`, `${NAMES[m[1]][1]} ${r[2]} at ${tStr(t)}.`);
+    if ((m = /^(他|她)几点$/.exec(pre))) return LX(`Во сколько ${PRON[m[1]][0]} ${r[2]}?`, `At what time ${PRON[m[1]][1]} ${r[2]}?`);
+  }
+  if ((m = /^(他|她)(.+)做什么$/.exec(core)) && (t = cnTime(m[2]))) return LX(`Что ${PRON[m[1]][0]} делает в ${tStr(t)}?`, `What does ${PRON[m[1]][1]} do at ${tStr(t)}?`);
+  // the map game
+  const place = h => { const p = GD.places.find(x => x[0] === h); return p ? p[2] : ''; };
+  if ((m = /^(.+?)在(.+?)(北边|南边|东边|西边)$/.exec(core)) && place(m[1]) && place(m[2])) { const d = DIRS[m[3]]; return LX(`${cap(place(m[1]))} — ${d[0]}: ${place(m[2])}.`, `The ${place(m[1])} is ${d[1]} the ${place(m[2])}.`); }
+  if ((m = /^(.+?)(北边|南边|东边|西边)是什么地方$/.exec(core)) && place(m[1])) { const d = DIRS[m[2]]; return LX(`Что находится ${d[0]}: ${place(m[1])}?`, `What is ${d[1]} the ${place(m[1])}?`); }
+  if ((m = /^(.+?)(北边|南边|东边|西边)是(.+)$/.exec(core)) && place(m[1]) && place(m[3])) { const d = DIRS[m[2]]; return LX(`${cap(d[0])}: ${place(m[1])} — ${place(m[3])}.`, `${cap(d[1])} the ${place(m[1])} is the ${place(m[3])}.`); }
+  // whose is it: 这是安娜的书。
+  if ((m = /^这是(.+)的(.+)$/.exec(core))) {
+    const ow = GD.owners.find(x => x[0] === m[1]), o = GD.objects.find(x => x[0] === m[2]);
+    if (ow && o) return LX(['my', 'your'].includes(ow[2]) || ['他', '她'].includes(ow[0]) ? `Это ${ownerRu(ow, o)} ${o[3]}.` : `Это ${o[3]} ${ownerRu(ow, o)}.`, `This is ${ownerRu(ow, o)} ${o[3]}.`);
+  }
+  // amount + measure word + thing: 两本书
+  for (const ms of GD.measures) {
+    if (!core.endsWith(ms[1] + ms[0])) continue;
+    const q = cnNum(core.slice(0, -(ms[1] + ms[0]).length)); if (q != null) return `${q} · ${ms[2]}`;
+  }
+  return '';
+}
+
+/* ---------- putting the translations on the screen ---------- */
+const NOHINT = new Set(['pic', 'hzfill', 'names', 'pinyin', 'syl', 'tone', 'initial', 'final', 'spell', 'sandhi', 'read', 'speak', 'order']);
+const stItem = () => (S && S.q && S.q[S.i]) || null;
+function stPill(text, cls) { const el = document.createElement('span'); el.className = 'ztr ' + (cls || ''); el.dataset.nopy = ''; el.textContent = text; return el; }
+function stText(el) { const c = el.cloneNode(true); c.querySelectorAll('.k, .rt, .py, .ztr').forEach(x => x.remove()); return c.textContent.replace(/\s+/g, ' ').trim(); }
+function stContext(body, it) {
+  if (!it || ['q', 'intro', 'bintro', 'speed', 'plisten', 'phrase'].includes(it.t)) return;
+  if (it.t === 'd' && it.k === 'dlg' && it.it.t === 'tf') return; // the translation is what is being checked
+  const kind = body.querySelector('.s-kind');
+  if (kind && !kind.querySelector('.ztr')) { const tx = stText(kind); if (!/[A-Za-zА-Яа-яЁё]/.test(tx)) { const tr = zt(tx); if (tr) kind.appendChild(stPill(tr, 'zkind')); } }
+  body.querySelectorAll('.prompt .qa .hz, .prompt .two .hz, .receipt .hz, .routine .hz, .month .mh .hz, .ddlg .dl > span').forEach(el => {
+    if (el.querySelector('.ztr')) return;
+    const tr = zt(stText(el)); if (tr) el.appendChild(stPill(tr, 'zctx'));
+  });
+}
+function stOptions(body) {
+  body.querySelectorAll('.opts .opt').forEach(o => {
+    if (o.querySelector('.ztr')) return;
+    const tx = stText(o); if (!/[㐀-鿿]/.test(tx) || /[А-Яа-яЁё]/.test(tx)) return;
+    const tr = zt(tx); if (!tr) return;
+    (o.lastElementChild || o).appendChild(stPill(tr, 'zopt'));
+  });
+}
+function stTopButton() {
+  const top = document.querySelector('#session .s-top');
+  if (!top || top.querySelector('.ztog')) return;
+  const py = top.querySelector('.pytog'); if (py) py.insertAdjacentHTML('beforebegin', ztrBtn());
+}
+function stQuestion() {
+  const body = $('#sbody'), it = stItem(); if (!body || !it) return;
+  stTopButton(); applyZtr();
+  stContext(body, it);
+  const hintable = it.t === 'g' || (it.t === 'd' && !NOHINT.has(it.k.split(':')[0]) && !(it.k === 'dlg' && it.it.t === 'tf'));
+  if (hintable && !body.querySelector('.zhint')) {
+    const has = [...body.querySelectorAll('.opts .opt')].some(o => { const tx = stText(o); return /[㐀-鿿]/.test(tx) && !/[А-Яа-яЁё]/.test(tx) && zt(tx); });
+    const opts = body.querySelector('.opts');
+    if (has && opts) opts.insertAdjacentHTML('afterend', `<button class="slow zhint" data-act="zhint">${LX('Подсказка: перевод вариантов', 'Hint: translate the options')}</button>`);
+  }
+}
+function stAnswered() {
+  const body = $('#sbody'), it = stItem(); if (!body) return;
+  stContext(body, it); stOptions(body);
+  const h = body.querySelector('.zhint'); if (h) h.remove();
+  document.querySelectorAll('#sfb .wcard .txt').forEach(t => {
+    const ru = t.querySelector('.ru'); if ((ru && ru.textContent.trim()) || t.querySelector('.ztr')) return;
+    const hz = t.querySelector('.hz'); if (!hz) return;
+    const tr = stText(hz).split('/').map(x => zt(x.trim())).find(Boolean); if (tr) t.appendChild(stPill(tr, 'zfb'));
+  });
+}
+{
+  const show0 = showItem, fb0 = feedback;
+  showItem = function () { show0(); try { if (S) stQuestion(); } catch (e) { /* ignore */ } };
+  feedback = function (ok, w, extra) { fb0(ok, w, extra); try { stAnswered(); } catch (e) { /* ignore */ } };
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('[data-act="zhint"]') || !S || S.answered) return;
+  S.hinted = true; stOptions($('#sbody'));
+  const h = $('#sbody .zhint'); if (h) h.remove();
+});
+if (/zhtest/.test(location.hash)) window.__zt = zt;
 
 
 /* ================= events ================= */
