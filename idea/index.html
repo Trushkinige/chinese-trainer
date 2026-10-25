@@ -2753,6 +2753,9 @@ textarea.ptext { flex: none; box-sizing: border-box; min-height: 96px; width: 10
 .pytog.zfloat[aria-pressed="false"] { background: var(--sheet); }
 @media (min-width: 600px) { .pytog.zfloat { right: max(16px, calc(50% - 264px)); } }
 :root[data-theme="light"] { color-scheme: light; }
+.top.tb2 { flex-wrap: wrap; row-gap: 10px; }
+.top.tb2 .topbtns { order: 5; flex-basis: 100%; display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
+.top.tb2 > .grow { flex: 1 1 0; min-width: 0; }
 </style>
 <main id="app"><div id="view"></div></main>
 <nav class="tabbar" id="tabbar" aria-label="Разделы"></nav>
@@ -5032,8 +5035,8 @@ function faqData() {
         `<p>Practice → “Break down a sentence from the book” (or Lessons → Reference). Copy the line with the iPhone camera (the Live Text button) and paste it: the trainer shows pinyin over every character, reads the sentence aloud and translates, in order, every word that is in lessons 1–10. Tap a word to open its card with your progress.</p>
         <p>The translation goes word by word; it is not a machine translation of the whole sentence. Words that aren't in lessons 1–10 yet get pinyin only.</p>`) },
       { id: 'ztr', q: LX('Как понять примеры в теории?', 'How do I understand the examples in the grammar?'), a: LX(
-        `<p>В уроке → «Теория» у каждого китайского примера рядом стоит перевод (в цветной плашке), если в самом тексте его нет. Кнопка «перевод» вверху экрана, рядом с «pīnyīn», прячет и показывает переводы — например, чтобы проверить себя. Выбор запоминается. Нажмите на пример — он прозвучит.</p>`,
-        `<p>In a lesson → Theory, every Chinese example gets its translation next to it (in a coloured tag) unless the text already gives it. The “translation” button at the top, next to “pīnyīn”, hides and shows them, for example to test yourself. Your choice is remembered. Tap an example to hear it.</p>`) },
+        `<p>В уроке → «Теория» у каждого китайского примера рядом стоит перевод (в цветной плашке), если в самом тексте его нет. Сегодняшняя дата на главном экране — тоже с переводом. Кнопка «перевод» вверху каждого экрана, рядом с «pīnyīn» (в теории — ещё и внизу справа), прячет и показывает все эти переводы — например, чтобы проверить себя. Выбор запоминается. Нажмите на пример — он прозвучит.</p>`,
+        `<p>In a lesson → Theory, every Chinese example gets its translation next to it (in a coloured tag) unless the text already gives it. Today's date on the home screen has a translation too. The “translation” button at the top of every screen, next to “pīnyīn” (and in the grammar also at the bottom right), hides and shows all of them, for example to test yourself. Your choice is remembered. Tap an example to hear it.</p>`) },
       { id: 'tasks', q: LX('Где упражнение в учебнике?', 'Where is an exercise in the textbook?'), a: LX(
         `<p>В уроке нажмите «Задания в книгах». Для каждой книги — страницы и номер упражнения так, как он напечатан (一、二、三… — разделы и упражнения, (一)(二) и 1, 2, 3… — пункты внутри них), перевод и что делать. В списке игр тоже указана страница учебника.</p>
         <p><b>Кнопки ▸ под упражнением</b> — тренировка того же навыка на словах этого урока: на слух тон, инициаль, финаль; пиньинь; вставить слово; составить предложение; подобрать ответ; вопросы к диалогу; преобразовать фразу; сказать о себе по образцу. Примеры свои, не из учебника, но в них есть все слова урока и несколько новых — учитель спрашивает по словам урока, и вы их встретите в разных фразах.</p>
@@ -5618,6 +5621,11 @@ function applyZtr() {
   document.querySelectorAll('.ztog').forEach(b => { b.setAttribute('aria-pressed', String(ztrOn())); const s = b.querySelector('.pym'); if (s) s.textContent = ztrOn() ? LX('вкл', 'on') : LX('выкл', 'off'); });
 }
 const ztrBtn = () => `<button class="pytog ztog" data-act="ztrtoggle" data-nopy aria-pressed="${ztrOn()}" aria-label="${LX('Перевод примеров: показать или скрыть', 'Translation of the examples: show or hide')}">${LX('перевод', 'translation')} <span class="pym">${ztrOn() ? LX('вкл', 'on') : LX('выкл', 'off')}</span></button>`;
+function ztrDate() {
+  const d = new Date(), loc = LANG === 'en' ? 'en-GB' : 'ru-RU';
+  const wd = d.toLocaleDateString(loc, { weekday: 'long' }), dm = d.toLocaleDateString(loc, { day: 'numeric', month: 'long' });
+  return LX(`Сегодня ${dm}, ${wd}.`, `Today is ${wd}, ${dm}.`);
+}
 // Text that follows a snippet in its own line, up to the next Chinese snippet.
 function ztrAfter(sp) {
   let s = '', n = sp;
@@ -5659,11 +5667,20 @@ function ztrDecorate(root) {
     const el = document.createElement('span'); el.className = 'ztr'; el.dataset.nopy = ''; el.textContent = LX(tr.ru, tr.en);
     at.after(el);
   });
-  // the button next to pinyin: on a lesson's grammar tab and in reference sheets
+  // today's date on the home screen
+  const tp = root.querySelector && root.querySelector('.speak .today-py');
+  if (tp && !root.querySelector('.ztoday')) tp.insertAdjacentHTML('afterend', `<br><span class="ztr ztoday" data-nopy>${esc(ztrDate())}</span>`);
+  // the button next to pinyin on every screen that has one
+  const py = root.querySelector && root.querySelector('header.top .pytog:not(.ztog)');
+  if (py && !root.querySelector('header.top .ztog')) py.insertAdjacentHTML('beforebegin', ztrBtn());
+  // the header buttons go to their own row, so the title keeps its room on a phone
+  const hdr = root.querySelector && root.querySelector('header.top');
+  if (hdr && !hdr.querySelector('.topbtns')) {
+    const btns = [...hdr.children].filter(x => x.matches('.ztog, .pytog, .langbtn'));
+    if (btns.length) { const box = document.createElement('div'); box.className = 'topbtns'; btns.forEach(x => box.appendChild(x)); hdr.appendChild(box); hdr.classList.add('tb2'); }
+  }
+  // and on a lesson's grammar tab a copy that stays on screen while reading further down
   if (VIEW.tab === 'lessons' && VIEW.lesson && VIEW.ltab === 'theory' && root.querySelector) {
-    const py = root.querySelector('header.top .pytog:not(.ztog)');
-    if (py && !root.querySelector('header.top .ztog')) py.insertAdjacentHTML('beforebegin', ztrBtn());
-    // and a copy that stays on screen while reading further down the grammar
     const th = root.querySelector('.theory');
     if (th && !root.querySelector('.zfloat')) th.insertAdjacentHTML('afterend', ztrBtn().replace('class="pytog ztog"', 'class="pytog ztog zfloat"'));
   }
