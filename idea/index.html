@@ -2748,6 +2748,10 @@ textarea.ptext { flex: none; box-sizing: border-box; min-height: 96px; width: 10
 .ztog .pym { text-transform: none; }
 .run .nw { white-space: nowrap; }
 .greet .grow { min-width: 0; } .greet .row input.gname { width: 0; flex: 1; }
+.pytog.zfloat { position: fixed; z-index: 15; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(var(--tabbar) + 14px + env(safe-area-inset-bottom, 0px)); min-height: 44px; padding: 5px 14px; font-size: 14px; box-shadow: var(--shadow); }
+.pytog.zfloat .pym { font-size: 11.5px; }
+.pytog.zfloat[aria-pressed="false"] { background: var(--sheet); }
+@media (min-width: 600px) { .pytog.zfloat { right: max(16px, calc(50% - 264px)); } }
 </style>
 <main id="app"><div id="view"></div></main>
 <nav class="tabbar" id="tabbar" aria-label="Разделы"></nav>
@@ -5656,6 +5660,9 @@ function ztrDecorate(root) {
   if (VIEW.tab === 'lessons' && VIEW.lesson && VIEW.ltab === 'theory' && root.querySelector) {
     const py = root.querySelector('header.top .pytog:not(.ztog)');
     if (py && !root.querySelector('header.top .ztog')) py.insertAdjacentHTML('beforebegin', ztrBtn());
+    // and a copy that stays on screen while reading further down the grammar
+    const th = root.querySelector('.theory');
+    if (th && !root.querySelector('.zfloat')) th.insertAdjacentHTML('afterend', ztrBtn().replace('class="pytog ztog"', 'class="pytog ztog zfloat"'));
   }
   const sh = root.id === 'sheetbg' ? root.querySelector('.sheet') : null;
   if (sh && sh.querySelector('.ztr') && !sh.querySelector('.ztog')) {
