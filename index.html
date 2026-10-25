@@ -2751,6 +2751,7 @@ textarea.ptext { flex: none; box-sizing: border-box; min-height: 96px; width: 10
 .pytog.zfloat .pym { font-size: 11.5px; }
 .pytog.zfloat[aria-pressed="false"] { background: var(--sheet); }
 @media (min-width: 600px) { .pytog.zfloat { right: max(16px, calc(50% - 264px)); } }
+:root[data-theme="light"] { color-scheme: light; }
 </style>
 <main id="app"><div id="view"></div></main>
 <nav class="tabbar" id="tabbar" aria-label="Разделы"></nav>
@@ -5089,6 +5090,7 @@ function wordProgressHTML(w) {
 function faqDecorate(root) {
   parseDecorate(root);
   motivateDecorate(root);
+  applyTheme();
   brandDecorate(root);
   ztrDecorate(root);
   root.querySelectorAll('.legend').forEach(lg => { if (!lg.querySelector('.faqlink')) lg.insertAdjacentHTML('beforeend', faqLink('levels')); });
@@ -5115,6 +5117,7 @@ function faqSettings() {
   if (h) h.insertAdjacentHTML('afterend', `<button class="btn ghost block" data-act="faq">${LX('Вопросы и ответы: как всё считается', 'Questions and answers: how everything is counted')}</button>`);
   motivateSettings();
   brandSettings();
+  themeSettings();
 }
 
 document.addEventListener('click', e => {
@@ -5672,6 +5675,29 @@ function ztrDecorate(root) {
 document.addEventListener('click', e => {
   if (!e.target.closest('[data-act="ztrtoggle"]')) return;
   P.settings.ztr = !ztrOn(); touch(); applyZtr();
+});
+
+/* ================= light or dark screen =================
+   «Как в телефоне» follows the phone's setting; «Светлая» and «Тёмная» fix it for this app (P.settings.theme). */
+function applyTheme() {
+  const m = P.settings.theme, r = document.documentElement;
+  if (m === 'light' || m === 'dark') { if (r.dataset.theme !== m) r.dataset.theme = m; } else if (r.dataset.theme) delete r.dataset.theme;
+}
+applyTheme();
+function themeSettings() {
+  const sheet = document.querySelector('#sheetbg .sheet'); if (!sheet) return;
+  const lang = sheet.querySelector('[data-act="lang"]'); const anchor = (lang && lang.closest('.field')) || sheet.querySelector('.row');
+  const cur = P.settings.theme === 'light' || P.settings.theme === 'dark' ? P.settings.theme : 'auto';
+  const chip = (v, label) => `<button class="chip" data-act="theme" data-v="${v}" aria-pressed="${cur === v}">${label}</button>`;
+  anchor.insertAdjacentHTML('afterend', `<div class="field themefield"><span>${LX('Экран', 'Screen')}</span>
+    <div class="chips">${chip('light', LX('☀️ Светлый', '☀️ Light'))}${chip('dark', LX('🌙 Тёмный', '🌙 Dark'))}${chip('auto', LX('Как в телефоне', 'Like the phone'))}</div>
+    <small>${LX('Светлый — белый фон и тёмный текст, тёмный — наоборот. «Как в телефоне» меняется вместе с настройкой iPhone (днём светлый, ночью тёмный, если так настроено).', 'Light is a white background with dark text, dark is the reverse. “Like the phone” follows the iPhone setting (light by day, dark at night if it is set up that way).')}</small></div>`);
+}
+document.addEventListener('click', e => {
+  const a = e.target.closest('[data-act="theme"]'); if (!a) return;
+  P.settings.theme = a.dataset.v === 'auto' ? null : a.dataset.v; touch(); applyTheme();
+  const sh = $('.sheet'), st = sh ? sh.scrollTop : 0;
+  settingsSheet(); if ($('.sheet')) $('.sheet').scrollTop = st; render();
 });
 
 
