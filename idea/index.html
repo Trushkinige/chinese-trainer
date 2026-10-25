@@ -2744,7 +2744,7 @@ textarea.ptext { flex: none; box-sizing: border-box; min-height: 96px; width: 10
 
 /* translation of the Chinese examples in texts */
 .ztr { display: inline; font-size: .86em; line-height: 1.5; color: var(--ink); background: var(--accent-soft); border-radius: 6px; padding: 1px 6px; margin: 0 .3em 0 .25em; font-style: normal; font-weight: 500; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
-.ztr-off .ztr { display: none; }
+body.ztr-off .ztr { display: none !important; } /* wins over the per-place display rules of the pills */
 .ztog .pym { text-transform: none; }
 .run .nw { white-space: nowrap; }
 .greet .grow { min-width: 0; } .greet .row input.gname { width: 0; flex: 1; }
@@ -2942,7 +2942,7 @@ function applyPyMode() {
   const m = P.settings.pinyin;
   document.body.classList.toggle('py-all', m === 'always');
   document.body.classList.toggle('py-none', m === 'never');
-  document.querySelectorAll('.pytog').forEach(b => { b.dataset.mode = m; b.setAttribute('aria-pressed', String(m === 'always')); const s = b.querySelector('.pym'); if (s) s.textContent = PY_MODE_RU[m] || ''; });
+  document.querySelectorAll('.pytog:not(.ztog)').forEach(b => { b.dataset.mode = m; b.setAttribute('aria-pressed', String(m === 'always')); const s = b.querySelector('.pym'); if (s) s.textContent = PY_MODE_RU[m] || ''; });
 }
 // The button cycles: auto (ladder) → pinyin over everything → no pinyin → auto.
 const PY_MODE_RU = { ladder: t('авто'), always: t('все'), never: t('нет') };
