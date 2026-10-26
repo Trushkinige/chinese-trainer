@@ -2765,6 +2765,21 @@ body.ztr-off .ztr { display: none !important; } /* wins over the per-place displ
 .fb .ztr.zfb { display: inline-block; width: fit-content; margin-top: 4px; }
 .zhint { align-self: center; }
 .s-top .ztog { min-height: 30px; padding: 2px 8px; font-size: 11.5px; }
+/* game: pinyin tiles */
+.tl-hud { display: flex; justify-content: space-between; align-items: center; font-size: 18px; font-weight: 650; }
+.tl-track { position: relative; height: 112px; overflow: hidden; border-top: 3px dashed var(--line); border-bottom: 3px dashed var(--line); }
+.tl-word { position: absolute; left: 0; top: 50%; transform: translate(110vw, -50%); white-space: nowrap; font-family: var(--font-hz); font-size: 64px; line-height: 1; color: var(--ink); will-change: transform; }
+.tl-word.hit { color: var(--ok); }
+.tl-word.gone { opacity: .25; }
+.tl-msg { min-height: 22px; text-align: center; font-size: 15px; }
+.tl-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.tl-tile { min-height: 50px; padding: 6px 4px; border-radius: 9px; color: #fff; font-family: var(--font-py); font-size: 19px; font-weight: 600; text-shadow: 0 1px 1px rgba(0,0,0,.18); box-shadow: inset 0 -4px 0 rgba(0,0,0,.14); overflow-wrap: anywhere; line-height: 1.15; transition: opacity .25s ease, transform .25s ease; }
+.tl-tile.c0 { background: #A77BDB; } .tl-tile.c1 { background: #7C83DB; } .tl-tile.c2 { background: #D9707A; } .tl-tile.c3 { background: #5FB58C; } .tl-tile.c4 { background: #CF84D0; }
+.tl-tile.c5 { background: #6FA982; } .tl-tile.c6 { background: #E99A55; } .tl-tile.c7 { background: #5FA9D8; } .tl-tile.c8 { background: #E07E66; }
+.tl-tile.done { opacity: 0; transform: scale(.8); pointer-events: none; }
+.tl-tile.shake { animation: tlshake .35s ease; }
+@keyframes tlshake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
+.tl-tile.long { font-size: 15px; }
 </style>
 <main id="app"><div id="view"></div></main>
 <nav class="tabbar" id="tabbar" aria-label="Разделы"></nav>
@@ -3712,6 +3727,7 @@ function showItem() {
   if (it.t === 'plisten') return renderPhraseListen(it);
   if (it.t === 'g') return renderGame(it);
   if (it.t === 'speed') return renderSpeed(it);
+  if (it.t === 'tiles') return renderTiles(it);
   if (it.t === 'bintro') return renderBIntro(it);
   if (it.t === 'd') return renderDrill(it);
   if (BBY[it.wid]) return renderBasic(it);
@@ -4437,6 +4453,7 @@ const GAME_REF = { sudoku: t('с. 24, упр. 四'), nums: t('с. 45 упр. 一
 function startGame(id, extra) {
   const G = GAMES[id];
   if (id === 'speed') return startSession([{ t: 'speed' }], { title: G.name, game: id });
+  if (id === 'tiles') return startSession([{ t: 'tiles' }], { title: G.name, game: id });
   if (id === 'sudoku') return startSession([{ t: 'g', g: 'sudoku' }, { t: 'g', g: 'sudoku' }], { title: G.name, game: id });
   if (!TR.lessons) { const s = new Set(W.filter(w => P.seen[w.id]).map(w => w.lesson)); TR.lessons = s.size ? [...s] : [1]; } // a game opened from a lesson, before the Practice tab
   const n = 10, ctx = Object.assign({}, extra || {});
@@ -4566,6 +4583,105 @@ document.addEventListener('click', e => {
     case 'reveal': { const t = a.nextElementSibling; if (t) { t.hidden = false; a.remove(); } break; }
   }
 });
+
+/* ================= game: pinyin tiles =================
+   A word floats across the top; tap its pinyin among the tiles before it leaves the screen. A matched tile disappears;
+   a wrong tile or a word that floats away costs a heart (3 hearts). The words: the ones you have started, or one lesson. */
+GAMES.tiles = {
+  name: LX('Плитки: пиньинь', 'Tiles: pinyin'),
+  desc: LX('Иероглиф плывёт сверху — найдите его пиньинь среди плиток, пока он не уплыл. Ваши начатые слова или слова урока.', 'A word floats across the top — tap its pinyin tile before it is gone. Your started words or a lesson\'s words.'),
+  from: 1, special: true
+};
+GAME_ORDER.splice(GAME_ORDER.indexOf('speed') + 1, 0, 'tiles');
+const TL_MAX = 18;
+const tlKey = py => pyMain(py).toLowerCase().replace(/[\s'’·-]/g, '');
+// Words for one round: single-form words with different pinyin and characters (他 and 她 are both tā, so only one of them).
+function tilesWords(lesson) {
+  let ws = lesson ? MAINW.filter(w => w.lesson === lesson) : W.filter(w => P.seen[w.id]);
+  ws = ws.filter(w => /^[㐀-鿿]+$/.test(w.hz) && pyMain(w.py));
+  const py = new Set(), hz = new Set(), out = [];
+  // the latest lessons first, so a long list keeps what you are learning now
+  shuffle(ws.slice()).sort((a, b) => (b.lesson || 0) - (a.lesson || 0)).forEach(w => {
+    const k = tlKey(w.py); if (py.has(k) || hz.has(w.hz) || out.length >= TL_MAX) return;
+    py.add(k); hz.add(w.hz); out.push(w);
+  });
+  return shuffle(out);
+}
+function renderTiles() {
+  const body = $('#sbody'); S.answered = true;
+  const started = tilesWords(0).length;
+  const choose = () => {
+    const lessons = LESSONS.map(l => l.n);
+    body.innerHTML = `<div class="summary"><div class="seal" style="width:72px;height:72px;font-size:40px">拼</div><h2>${esc(GAMES.tiles.name)}</h2>
+      <p class="muted">${LX('Иероглиф плывёт по верхней полосе — нажмите плитку с его пиньинем, пока он не уплыл. Верная плитка исчезает. Неверная плитка или уплывший иероглиф — минус сердце, их три. С каждым верным ответом слова плывут быстрее.', 'A word floats along the top strip — tap the tile with its pinyin before it is gone. A right tile disappears. A wrong tile or a word that gets away costs a heart; you have three. Each right answer makes the words faster.')}</p>
+      <div class="field" style="width:100%;text-align:left"><span>${LX('Какие слова', 'Which words')}</span>
+      <div class="chips"><button class="chip" data-tlset="0" aria-pressed="true" ${started < 6 ? 'disabled' : ''}>${LX('Мои начатые', 'My started words')} · ${Math.min(started, TL_MAX)}</button>${lessons.map(n => `<button class="chip" data-tlset="${n}" aria-pressed="false">${LX('Урок', 'Lesson')} ${n}</button>`).join('')}</div>
+      ${started < 6 ? `<small>${LX('Начатых слов пока меньше шести — выберите урок.', 'Fewer than six started words so far — pick a lesson.')}</small>` : ''}</div>
+      <button class="btn primary block" data-tlgo ${started < 6 ? 'disabled' : ''}>${LX('Начать', 'Start')}</button></div>`;
+    let set = started >= 6 ? 0 : -1;
+    body.querySelector('.chips').onclick = e => {
+      const c = e.target.closest('[data-tlset]'); if (!c || c.disabled) return;
+      set = +c.dataset.tlset; body.querySelectorAll('[data-tlset]').forEach(x => x.setAttribute('aria-pressed', String(x === c)));
+      body.querySelector('[data-tlgo]').disabled = false;
+    };
+    body.querySelector('[data-tlgo]').onclick = () => { if (set < 0) return; unlockTTS(); play(tilesWords(set), set); };
+  };
+  const play = (words, set) => {
+    const run = {}; S.tl = run;
+    const st = { lives: 3, score: 0, wrong: 0, n: words.length, dur: 7500, queue: words.slice(), left: new Set(words.map(w => w.id)), t0: Date.now(), cur: null, anim: null };
+    const grid = shuffle(words.slice());
+    body.innerHTML = `<div class="tl-hud"><span class="tl-hearts" aria-label="${LX('Жизни', 'Lives')}"></span><span class="tl-score num"></span></div>
+      <div class="tl-track"><span class="tl-word" data-nopy></span></div>
+      <div class="tl-msg muted" aria-live="polite"></div>
+      <div class="tl-grid">${grid.map((w, i) => `<button class="tl-tile c${i % 9}${pyMain(w.py).length > 9 ? ' long' : ''}" data-tl="${w.id}">${esc(pyMain(w.py))}</button>`).join('')}</div>`;
+    const word = body.querySelector('.tl-word'), track = body.querySelector('.tl-track'), msg = body.querySelector('.tl-msg');
+    const hud = () => { body.querySelector('.tl-hearts').textContent = '❤️'.repeat(st.lives) + '🤍'.repeat(3 - st.lives); body.querySelector('.tl-score').textContent = `✓ ${st.score} / ${st.n}`; };
+    const alive = () => S && S.tl === run && $('#sbody') === body;
+    const log = ok => { const d = dayLog(); d.a++; if (ok) d.c++; const s = d.s.game || (d.s.game = [0, 0]); s[0]++; if (ok) s[1]++; touch(); starsOnAnswer(ok, { t: 'g' }); };
+    const next = () => {
+      if (!alive()) return;
+      hud();
+      if (st.lives <= 0 || !st.left.size) return finish();
+      while (st.queue.length && !st.left.has(st.queue[0].id)) st.queue.shift();
+      st.cur = st.queue.shift();
+      word.textContent = st.cur.hz; word.classList.remove('hit', 'gone');
+      const from = track.clientWidth + 10;
+      if (st.anim) { st.anim.onfinish = null; st.anim.cancel(); }
+      st.anim = word.animate([{ transform: `translate(${from}px, -50%)` }, { transform: 'translate(-110%, -50%)' }], { duration: st.dur, easing: 'linear', fill: 'forwards' });
+      st.anim.onfinish = () => { if (!alive()) return; st.lives--; st.wrong++; st.queue.push(st.cur); log(false); msg.textContent = LX(`Уплыло: ${st.cur.hz} — ${pyMain(st.cur.py)}`, `Got away: ${st.cur.hz} — ${pyMain(st.cur.py)}`); word.classList.add('gone'); setTimeout(next, 600); };
+    };
+    const finish = () => {
+      if (st.anim) { st.anim.onfinish = null; st.anim.cancel(); }
+      const secs = Math.round((Date.now() - st.t0) / 1000), win = !st.left.size;
+      P.games = P.games || {}; const best = P.games.tiles || 0; if (st.score > best) P.games.tiles = st.score; touch();
+      S.a = st.score + st.wrong; S.c = st.score;
+      $('#session .s-top .bar i').style.width = '100%';
+      body.innerHTML = `<div class="summary"><div class="seal" style="width:72px;height:72px;font-size:40px">${win ? '好' : '拼'}</div>
+        <h2>${win ? LX('Все плитки собраны!', 'All tiles matched!') : LX('Сердца кончились', 'Out of hearts')}</h2>
+        <div class="big">${st.score} / ${st.n}</div>
+        <p class="muted">${LX(`ошибок: ${st.wrong} · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`, `mistakes: ${st.wrong} · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`)}${st.score > best ? ' · ' + LX('новый рекорд!', 'new record!') : ''}</p>
+        <div class="row" style="width:100%"><button class="btn ghost grow" data-act="endsession">${LX('Готово', 'Done')}</button><button class="btn primary grow" data-tlagain>${LX('Ещё раз', 'Again')}</button></div></div>`;
+      body.querySelector('[data-tlagain]').onclick = () => play(tilesWords(set), set);
+    };
+    body.querySelector('.tl-grid').onclick = e => {
+      const b = e.target.closest('[data-tl]'); if (!b || b.disabled || !st.cur || !alive() || st.lives <= 0) return;
+      if (b.dataset.tl === st.cur.id) {
+        st.score++; st.left.delete(st.cur.id); b.disabled = true; b.classList.add('done');
+        if (st.anim) { st.anim.onfinish = null; st.anim.pause(); }
+        word.classList.add('hit'); say(st.cur.hz); log(true);
+        msg.textContent = `${st.cur.hz} ${pyMain(st.cur.py)}` + (ztrOn() ? ` — ${st.cur.ru}` : '');
+        st.dur = Math.max(3500, st.dur - 220);
+        setTimeout(next, 450);
+      } else {
+        st.wrong++; st.lives--; log(false); hud();
+        b.classList.remove('shake'); void b.offsetWidth; b.classList.add('shake');
+        if (st.lives <= 0) setTimeout(finish, 500);
+      }
+    };
+    next();
+  };
+  choose();
+}
 
 /* ================= writing basics: strokes (笔画) and radicals (部首) ================= */
 const BAS = i18nData(JSON.parse(document.getElementById('basics-data').textContent));
