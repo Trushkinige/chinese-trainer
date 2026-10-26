@@ -2781,6 +2781,17 @@ body.ztr-off .ztr { display: none !important; } /* wins over the per-place displ
 .tl-tile.shake { animation: tlshake .35s ease; }
 @keyframes tlshake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
 .tl-tile.long { font-size: 15px; }
+/* game: build a sentence (S + V + O) */
+.svo-legend { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; font-size: 12.5px; font-weight: 600; }
+.svo-legend span { padding: 2px 9px; border-radius: 999px; }
+.svT { --sv: #4F86C6; } .svS { --sv: #3E9A6B; } .svV { --sv: #D9822B; } .svP { --sv: #9A6BC9; } .svO { --sv: #C8577A; }
+.svo-legend span, .tile.svT, .tile.svS, .tile.svV, .tile.svP, .tile.svO { border-color: var(--sv); color: var(--sv); background: color-mix(in srgb, var(--sv) 10%, var(--sheet)); }
+.tile.svT, .tile.svS, .tile.svV, .tile.svP, .tile.svO { border-width: 2px; color: var(--ink); }
+.svo-board { gap: 7px; }
+.svo-board .tile { font-size: 21px; min-height: 48px; padding: 0 10px; }
+.svo-board .tile, [data-svo] .answer-line .tile { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.15; padding: 4px 10px; }
+.tile .ztr.svg { margin: 1px 0 0; padding: 0; background: none; border: 0; font: 600 11px/1.1 var(--font-ui, system-ui), sans-serif; color: var(--muted); white-space: nowrap; }
+.tile:disabled { opacity: .35; }
 </style>
 <main id="app"><div id="view"></div></main>
 <nav class="tabbar" id="tabbar" aria-label="Разделы"></nav>
@@ -4478,6 +4489,7 @@ function bindTap(container, correct, onDone) {
 }
 function renderGame(it) {
   if (it.g === 'sudoku') return renderSudoku(it);
+  if (it.g === 'svo') return renderSvo(it);
   const G = GAMES[it.g];
   const q = it.q || (it.q = G.make(it.ctx || {}));
   const body = $('#sbody');
@@ -4688,6 +4700,169 @@ function renderTiles() {
   };
   choose();
 }
+
+/* ================= game: build a sentence (S + V + O) =================
+   Like the class board: words for «when», «who», «does what», «what / where to». Build the Russian (English) sentence
+   in Chinese, or make up your own — the trainer checks the order: [time] who [time] verb object, or [time] who 去 place [verb object],
+   and says what is wrong. Time goes first or right after «who», never at the end. */
+GAMES.svo = {
+  name: LX('Составь предложение', 'Build a sentence'),
+  desc: LX('Доска слов, как на уроке: когда, кто, что делает, что/куда (S + V + O). Соберите предложение по заданию или своё — тренажёр проверит порядок.', 'A word board like in class: when, who, does what, what/where (S + V + O). Build the given sentence or your own — the trainer checks the order.'),
+  from: 7, special: true
+};
+GAME_ORDER.splice(GAME_ORDER.indexOf('tiles') + 1, 0, 'svo');
+const svoCap = s => s ? s[0].toUpperCase() + s.slice(1) : s;
+const SVO = (() => {
+  const T = [['今天', 'Сегодня', 'Today', 'pres'], ['明天', 'Завтра', 'Tomorrow', 'fut'], ['昨天', 'Вчера', 'Yesterday', 'past'], ['星期日', 'В воскресенье', 'On Sunday', 'pres'], ['3月28号', '28 марта', 'On 28 March', 'fut']]
+    .map(([id, ru, en, tense]) => ({ id, cat: 'T', ru, en, tense, say: id === '3月28号' ? '三月二十八号' : id, gl: [ru.toLowerCase(), en.toLowerCase()] }));
+  const S = [['我', 'я', 'I', 0, 'm'], ['你', 'ты', 'you', 1, 'm'], ['他', 'он', 'he', 2, 'm'], ['她', 'она', 'she', 2, 'f'], ['我们', 'мы', 'we', 3, 'pl'], ['他们', 'они', 'they', 4, 'pl'], ['安娜', 'Анна', 'Anna', 2, 'f'], ['王明', 'Ван Мин', 'Wang Ming', 2, 'm']]
+    .map(([id, ru, en, p, g]) => ({ id, cat: 'S', ru, en, p, g, gl: [ru, en] }));
+  // verbs: present forms я/ты/он/мы/они, past m/f/pl, future, infinitive for «go there to …»; English base / 3rd person / past
+  const go = { pres: ['иду', 'идёшь', 'идёт', 'идём', 'идут'], past: { m: 'ходил', f: 'ходила', pl: 'ходили' }, fut: ['пойду', 'пойдёшь', 'пойдёт', 'пойдём', 'пойдут'] };
+  const V = {
+    去: { cat: 'V', mo: true, gl: ['идти', 'go'], ru: go, en: ['go', 'goes', 'went'] },
+    喝: { cat: 'V', gl: ['пить', 'drink'], obj: ['水', '咖啡'], ru: { pres: ['пью', 'пьёшь', 'пьёт', 'пьём', 'пьют'], past: { m: 'пил', f: 'пила', pl: 'пили' }, fut: 'пить', inf: 'попить' }, en: ['drink', 'drinks', 'drank'] },
+    吃: { cat: 'V', gl: ['есть', 'eat'], obj: ['水果', '苹果', '饭'], ru: { pres: ['ем', 'ешь', 'ест', 'едим', 'едят'], past: { m: 'ел', f: 'ела', pl: 'ели' }, fut: 'есть', inf: 'поесть' }, en: ['eat', 'eats', 'ate'] },
+    买: { cat: 'V', gl: ['покупать', 'buy'], obj: ['衣服', '水果', '苹果', '水', '咖啡', '书'], ru: { pres: ['покупаю', 'покупаешь', 'покупает', 'покупаем', 'покупают'], past: { m: 'купил', f: 'купила', pl: 'купили' }, fut: ['куплю', 'купишь', 'купит', 'купим', 'купят'], inf: 'купить' }, en: ['buy', 'buys', 'bought'] },
+    看医生: { cat: 'V', gl: ['к врачу', 'see a doctor'], ru: go, ruTail: 'к врачу', en: ['see a doctor', 'sees a doctor', 'saw a doctor'], enInf: 'to see a doctor' },
+    上课: { cat: 'V', gl: ['на урок', 'to class'], ru: go, ruTail: 'на занятия', en: ['go to class', 'goes to class', 'went to class'], enInf: 'for class' }
+  };
+  Object.keys(V).forEach(k => { V[k].id = k; });
+  // object: accusative, «to buy some …» (partitive), English, the tile's gloss
+  const O = { 水: ['воду', 'воды', 'water', 'вода'], 咖啡: ['кофе', 'кофе', 'coffee', 'кофе'], 水果: ['фрукты', 'фрукты', 'fruit', 'фрукты'], 苹果: ['яблоки', 'яблоки', 'apples', 'яблоко'], 饭: ['', '', 'a meal', 'еда, рис'], 衣服: ['одежду', 'одежду', 'clothes', 'одежда'], 书: ['книгу', 'книгу', 'a book', 'книга'] };
+  const OBJ = Object.entries(O).map(([id, [ru, rup, en, g]]) => ({ id, cat: 'O', ru, rup, en, gl: [g, en.replace(/^an? /, '')] }));
+  const P = [['商店', 'в магазин', 'to the shop', ['买']], ['学校', 'в школу', 'to school', ['上课']], ['医院', 'в больницу', 'to the hospital', ['看医生']], ['饭馆', 'в ресторан', 'to the restaurant', ['吃', '喝']], ['火车站', 'на вокзал', 'to the station', []]]
+    .map(([id, ru, en, fits]) => ({ id, cat: 'P', ru, en, fits, gl: [ru.replace(/^(в|на) /, '').replace(/у$/, 'а'), en.replace(/^to (the )?/, '')] }));
+  const ALL = [...T, ...S, ...Object.values(V), ...OBJ, ...P], BY = Object.fromEntries(ALL.map(x => [x.id, x]));
+  return { T, S, V, OBJ, P, BY };
+})();
+const svoName = x => x.id;
+// Check a sequence of word ids. Returns { ok, parts } or { ok: false, why }.
+function svoParse(ids) {
+  const tok = ids.map(id => SVO.BY[id]), why = s => ({ ok: false, why: s });
+  let i = 0, T = null;
+  if (!tok.length) return why(LX('Выберите слова на доске.', 'Pick words on the board.'));
+  if (tok[i] && tok[i].cat === 'T') T = tok[i++];
+  const S = tok[i];
+  if (!S || S.cat !== 'S') return why(S && S.cat === 'T' ? LX('Время — одно, в начале или сразу после «кто».', 'Only one time word, at the start or right after «who».') : LX('Сначала — кто (我, 你, 他…), перед ним можно поставить время.', 'First «who» (我, 你, 他…); a time word may go before it.'));
+  i++;
+  if (tok[i] && tok[i].cat === 'T') { if (T) return why(LX('Время — только одно.', 'Only one time word.')); T = tok[i++]; }
+  const V = tok[i];
+  if (!V || V.cat !== 'V') return why(V ? LX(`После «кто» — действие (глагол: 喝, 吃, 买, 去…), а не ${V.id}. Порядок: кто → что делает → что.`, `After «who» comes the action (a verb: 喝, 吃, 买, 去…), not ${V.id}. Order: who → does what → what.`) : LX('Не хватает действия: 喝, 吃, 买, 去…', 'The action is missing: 喝, 吃, 买, 去…'));
+  i++;
+  let place = null, V2 = null, Ob = null;
+  const needObj = (v, o) => {
+    if (!v.obj) return null;
+    if (!o || o.cat !== 'O') return LX(`После ${v.id} нужно «что»: ${v.obj.join(', ')}.`, `${v.id} needs «what»: ${v.obj.join(', ')}.`);
+    if (!v.obj.includes(o.id)) return LX(`${v.id}${o.id} — так не говорят. С ${v.id}: ${v.obj.join(', ')}.`, `${v.id}${o.id} — that doesn't go together. With ${v.id}: ${v.obj.join(', ')}.`);
+    return '';
+  };
+  if (V.mo) {
+    place = tok[i];
+    if (!place || place.cat !== 'P') return why(LX('После 去 — куда: 商店, 学校, 医院, 饭馆, 火车站.', 'After 去 comes where: 商店, 学校, 医院, 饭馆, 火车站.'));
+    i++;
+    if (tok[i]) {
+      V2 = tok[i];
+      if (V2.cat !== 'V' || V2.mo) return why(tok[i].cat === 'T' ? LX('Время не ставят в конец — только в начало или после «кто».', 'The time word never goes at the end — only first or after «who».') : LX(`После места — что там делать (глагол), а не ${V2.id}.`, `After the place comes what to do there (a verb), not ${V2.id}.`));
+      i++;
+      if (V2.obj) { const e = needObj(V2, tok[i]); if (e) return why(e); Ob = tok[i++]; }
+      if (!place.fits.includes(V2.id)) return why(LX(`${place.id} и ${V2.id}${Ob ? Ob.id : ''} не подходят друг к другу. В ${place.id}: ${place.fits.length ? place.fits.join(', ') : LX('просто 去' + place.id, '')}.`, `${place.id} and ${V2.id}${Ob ? Ob.id : ''} don't go together.`));
+    }
+  } else if (V.obj) { const e = needObj(V, tok[i]); if (e) return why(e); Ob = tok[i++]; }
+  if (i < tok.length) return why(tok[i].cat === 'T' ? LX('Время не ставят в конец — только в начало или после «кто».', 'The time word never goes at the end — only first or after «who».') : LX(`Лишнее в конце: ${tok.slice(i).map(x => x.id).join(' ')}.`, `Extra words at the end: ${tok.slice(i).map(x => x.id).join(' ')}.`));
+  return { ok: true, T, S, V, place, V2, Ob };
+}
+// The meaning of a correct sentence in Russian / English.
+function svoMeaning(r) {
+  const tense = r.T ? r.T.tense : 'pres', S = r.S;
+  const ruForm = v => { const f = v.ru; if (tense === 'past') return f.past[S.g === 'f' ? 'f' : S.g === 'pl' ? 'pl' : 'm']; if (tense === 'fut') return Array.isArray(f.fut) ? f.fut[S.p] : ['буду', 'будешь', 'будет', 'будем', 'будут'][S.p] + ' ' + f.fut; return f.pres[S.p]; };
+  const meal = v => v.id === '吃' && r.Ob && r.Ob.id === '饭';
+  let ru;
+  if (r.V.mo) {
+    let purpose = '';
+    if (r.V2) purpose = r.V2.ruTail ? r.V2.ruTail : meal(r.V2) ? 'пообедать' : `${r.V2.ru.inf} ${r.Ob.rup}`;
+    ru = `${ruForm(r.V)} ${r.place.ru}${purpose ? ' ' + purpose : ''}`;
+  } else if (r.V.ruTail) ru = `${ruForm(r.V)} ${r.V.ruTail}`;
+  else if (meal(r.V)) ru = { pres: ['обедаю', 'обедаешь', 'обедает', 'обедаем', 'обедают'][S.p], past: { m: 'обедал', f: 'обедала', pl: 'обедали' }[S.g === 'f' ? 'f' : S.g === 'pl' ? 'pl' : 'm'], fut: ['буду', 'будешь', 'будет', 'будем', 'будут'][S.p] + ' обедать' }[tense];
+  else ru = `${ruForm(r.V)} ${r.Ob.ru}`;
+  ru = `${r.T ? r.T.ru + ' ' + S.ru : svoCap(S.ru)} ${ru}.`;
+  const third = S.p === 2, en3 = v => tense === 'past' ? enV(v)[2] : tense === 'fut' ? 'will ' + enV(v)[0] : third ? enV(v)[1] : enV(v)[0];
+  const enObj = v => v.obj && r.Ob ? ' ' + r.Ob.en : '';
+  const enV = v => meal(v) ? ['have', 'has', 'had'] : v.en;
+  let en;
+  if (r.V.mo) {
+    let purpose = '';
+    if (r.V2) purpose = r.V2.enInf || `to ${enV(r.V2)[0]}${enObj(r.V2)}`;
+    en = `${en3(r.V)} ${r.place.en}${purpose ? ' ' + purpose : ''}`;
+  } else en = `${en3(r.V)}${enObj(r.V)}`;
+  en = `${r.T ? r.T.en + ' ' : ''}${r.T ? S.en : svoCap(S.en)} ${en}.`.replace(/^(\w)/, c => c.toUpperCase());
+  return LX(ru, en);
+}
+// A random correct sentence for the «build this» tasks.
+function svoRandom() {
+  for (let g = 0; g < 50; g++) {
+    const ids = [], T = Math.random() < .75 ? pick(SVO.T) : null, S = pick(SVO.S);
+    if (T && Math.random() < .7) ids.push(T.id, S.id); else { ids.push(S.id); if (T) ids.push(T.id); }
+    if (Math.random() < .55) {
+      const p = pick(SVO.P); ids.push('去', p.id);
+      if (p.fits.length && Math.random() < .8) { const v = SVO.V[pick(p.fits)]; ids.push(v.id); if (v.obj) ids.push(pick(v.obj)); }
+    } else { const v = SVO.V[pick(['喝', '吃', '买', '看医生', '上课'])]; ids.push(v.id); if (v.obj) ids.push(pick(v.obj)); }
+    if (svoParse(ids).ok) return ids;
+  }
+  return ['我', '喝', '水'];
+}
+function renderSvo(it) {
+  const ctx = it.ctx || {}; ctx.k = (ctx.k || 0) + 1;
+  if (window.__svo) window.__svo.it = it;
+  const free = it.free != null ? it.free : (it.free = ctx.k % 4 === 0);
+  const target = it.target || (it.target = free ? null : svoRandom());
+  // the board: the target's words plus others of each kind, about 16 tiles (all of them in «your own» mode)
+  if (!it.board) {
+    const want = free ? [...sample(SVO.T, 3), ...sample(SVO.S, 4), ...Object.values(SVO.V), ...sample(SVO.OBJ, 4), ...sample(SVO.P, 3)].map(x => x.id)
+      : [...new Set([...target, ...sample(SVO.T, 2).map(x => x.id), ...sample(SVO.S, 2).map(x => x.id), ...sample(Object.keys(SVO.V), 3), ...sample(SVO.OBJ, 3).map(x => x.id), ...sample(SVO.P, 2).map(x => x.id)])];
+    const order = { T: 0, S: 1, V: 2, P: 3, O: 4 };
+    it.board = [...new Set(want)].sort((a, b) => order[SVO.BY[a].cat] - order[SVO.BY[b].cat] || Math.random() - .5);
+  }
+  const chosen = [];
+  const prompt = free
+    ? `<span class="ru-big" style="font-size:20px">${LX('Составьте своё предложение из слов на доске', 'Make up your own sentence from the words on the board')}</span><span class="hint">${LX('когда + кто + что делает + что · или: кто + 去 + куда + что делать', 'when + who + does what + what · or: who + 去 + where + what to do')}</span>`
+    : `<span class="ru-big">${esc(svoMeaning(svoParse(target)))}</span><span class="hint">${LX('Соберите это по-китайски', 'Build it in Chinese')}</span>`;
+  $('#sbody').innerHTML = `<div data-svo style="display:flex;flex-direction:column;gap:14px"><div class="s-kind">${esc(GAMES.svo.name)} · S + V + O</div>
+    <div class="prompt">${prompt}</div>
+    <div class="answer-line" data-line></div>
+    <div class="svo-legend"><span class="svT">${LX('когда', 'when')}</span><span class="svS">${LX('кто', 'who')}</span><span class="svV">${LX('что делает', 'does')}</span><span class="svP">${LX('куда', 'where')}</span><span class="svO">${LX('что', 'what')}</span></div>
+    <div class="tiles svo-board" data-tiles>${it.board.map((id, j) => `<button class="tile sv${SVO.BY[id].cat}" data-tile="${j}"><span class="svw">${esc(svoName(SVO.BY[id]))}</span><span class="ztr svg" data-nopy>${esc(LX(...SVO.BY[id].gl))}</span></button>`).join('')}</div>
+    <div class="row"><button class="btn ghost" data-sv="clear">${LX('Заново', 'Start over')}</button><button class="btn primary grow" data-sv="check" disabled>${LX('Проверить', 'Check')}</button></div></div>`;
+  const line = $('[data-line]'), area = $('[data-tiles]'), check = $('[data-sv="check"]');
+  const paint = () => {
+    line.innerHTML = chosen.map((j, m) => { const x = SVO.BY[it.board[j]]; return `<button class="tile sv${x.cat}" data-back="${m}"><span class="svw">${esc(x.id)}</span><span class="ztr svg" data-nopy>${esc(LX(...x.gl))}</span></button>`; }).join('');
+    area.querySelectorAll('[data-tile]').forEach(b => { b.disabled = chosen.includes(+b.dataset.tile); });
+    check.disabled = chosen.length < 2;
+  };
+  $('[data-svo]').addEventListener('click', e => {
+    if (S.answered) return;
+    const tt = e.target.closest('[data-tile]'), bk = e.target.closest('[data-back]'), b = e.target.closest('[data-sv]');
+    if (tt && !tt.disabled) { chosen.push(+tt.dataset.tile); paint(); const x = SVO.BY[it.board[+tt.dataset.tile]]; say(x.say || x.id); }
+    else if (bk) { chosen.splice(+bk.dataset.back, 1); paint(); }
+    else if (b && b.dataset.sv === 'clear') { chosen.length = 0; paint(); }
+    else if (b && b.dataset.sv === 'check' && chosen.length) {
+      const ids = chosen.map(j => it.board[j]), r = svoParse(ids);
+      const same = target && [...ids].sort().join() === [...target].sort().join();
+      const ok = r.ok && (free || same);
+      const zh = ids.map(id => SVO.BY[id].say || id).join('') + '。';
+      const right = target ? target.map(id => SVO.BY[id].say || id).join('') + '。' : '';
+      answer(ok); if (ok) say(zh);
+      let html = '';
+      if (ok) html = `<div class="wcard"><span class="txt"><span class="hz" style="font-size:24px">${esc(ids.join(''))}。</span><span class="ru">${esc(svoMeaning(r))}</span></span><span></span><button class="iconbtn" data-say="${esc(zh)}" aria-label="${LX('Прослушать', 'Listen')}">${I.sound}</button></div>`;
+      else {
+        const why = !r.ok ? r.why : LX('Предложение правильное, но не то, что в задании.', 'A correct sentence, but not the one asked for.') + (r.ok ? ' ' + LX('Ваше значит: ', 'Yours means: ') + svoMeaning(r) : '');
+        html = `<p class="note-box">${esc(why)}</p>` + (target ? `<div class="wcard"><span class="txt"><span class="hz" style="font-size:24px">${esc(target.join(''))}。</span><span class="ru">${esc(svoMeaning(svoParse(target)))}</span></span><span></span><button class="iconbtn" data-say="${esc(right)}" aria-label="${LX('Прослушать', 'Listen')}">${I.sound}</button></div>` : '');
+      }
+      feedback(ok, null, html + `<p class="note-box">${LX('Порядок: <b>когда</b> (или после «кто») → <b>кто</b> → <b>что делает</b> → <b>что / куда</b>.', 'Order: <b>when</b> (or after «who») → <b>who</b> → <b>does what</b> → <b>what / where</b>.')}</p>`);
+    }
+  });
+}
+if (/zhtest/.test(location.hash)) window.__svo = { parse: svoParse, meaning: svoMeaning, random: svoRandom, SVO };
 
 /* ================= writing basics: strokes (笔画) and radicals (部首) ================= */
 const BAS = i18nData(JSON.parse(document.getElementById('basics-data').textContent));
