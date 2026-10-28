@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#EFF3EE">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" href="favicon.png">
-<script>window.ZH_CLUB = "idea";</script>
+<script>window.ZH_CLUB = "idea"; window.ZH_AUDIO = "../audio/";</script>
 <style>:root{color-scheme:light dark}body{margin:0}[hidden]{display:none!important}</style>
 <title>Идея! Китайский</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600&family=Noto+Serif+SC:wght@400;600&family=Onest:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
@@ -3329,7 +3329,17 @@ function pickVoice() {
   TTS.voice = pref || zh[0] || vs.find(v => /^zh/i.test(v.lang) && !/HK|TW/i.test(v.lang)) || null;
   TTS.missing = vs.length > 0 && !TTS.voice;
 }
-function unlockTTS() { if (!TTS.ok || TTS.unlocked) return; try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); TTS.unlocked = true; } catch (e) { /* ignore */ } }
+function unlockTTS() {
+  if (voiceMode() !== 'tts') { recCtx(); recWarm(); }
+  if (!TTS.ok || TTS.unlocked) return; try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); TTS.unlocked = true; } catch (e) { /* ignore */ }
+}
+// Which voice: 'tts' — the phone's own; 'rec' — the recordings (src/audio.js); '' — not known yet (the first text tells).
+function voiceMode() {
+  const s = P.settings.voice || 'auto';
+  if (s === 'rec' || s === 'tts') return s;
+  if (!TTS.ok || TTS.missing) return 'rec';
+  return TTS.mode || '';
+}
 if (TTS.ok) { pickVoice(); try { speechSynthesis.addEventListener('voiceschanged', pickVoice); } catch (e) { /* old Safari */ } }
 const zhClean = s => String(s == null ? '' : s).replace(/[A-Za-z\u00C0-\u024F\u1E00-\u1EFF…'’]/g, '').trim();
 // Slow mode: the phone may ignore the speech rate, so it also changes WHAT is said:
@@ -3349,15 +3359,41 @@ function slowText(t) {
   return chunks.length > 1 ? `${chunks.join('，')}。${han.join('')}` : `${han.join('')}。${han.join('')}`;
 }
 function say(text, slow) {
-  if (!TTS.ok || !text) return;
+  const t = zhClean(text); if (!t) return;
+  const m = voiceMode();
+  if (m === 'rec') { recSay(t, slow).then(ok => { if (!ok && TTS.ok && !TTS.missing && P.settings.voice !== 'rec') ttsSpeak([{ text: slow ? slowText(t) : t, rate: slow ? 0.5 : P.settings.rate }], () => {}); }); return; }
+  ttsSpeak([{ text: slow ? slowText(t) : t, rate: slow ? 0.5 : P.settings.rate }], () => recSay(t, slow));
+}
+function sayStop() { recStop(); try { if (TTS.ok) speechSynthesis.cancel(); } catch (e) { /* ignore */ } }
+// The phone's voice. Android: cancel() right before speak() can swallow the new text — speak a moment later;
+// keep the utterance referenced (Chrome drops collected ones). While it is not known whether the voice works,
+// the first text is watched: no start within 2.5 s, or an error such as «no voice» → the recordings from then on.
+function ttsSpeak(parts, fallback) {
+  recStop();
+  if (!TTS.ok) { fallback(); return; }
+  const watch = voiceMode() === '' && P.settings.voice !== 'tts';
+  const go = () => {
+    try {
+      const us = parts.map(p => {
+        const u = new SpeechSynthesisUtterance(p.text);
+        u.lang = 'zh-CN'; if (TTS.voice) u.voice = TTS.voice;
+        u.rate = p.rate || P.settings.rate; if (p.mute) u.volume = 0;
+        return u;
+      });
+      TTS.cur = us;
+      if (watch) {
+        let started = false;
+        const fail = () => { if (started || TTS.cur !== us || TTS.mode) return; TTS.mode = 'rec'; try { speechSynthesis.cancel(); } catch (e) { /* ignore */ } fallback(); };
+        us[0].onstart = () => { started = true; TTS.mode = 'tts'; };
+        us[0].onerror = e => { if (!/interrupted|canceled|not-allowed/.test((e && e.error) || '')) fail(); };
+        setTimeout(fail, 2500);
+      }
+      us.forEach(u => speechSynthesis.speak(u));
+    } catch (e) { if (P.settings.voice !== 'tts') { TTS.mode = 'rec'; fallback(); } }
+  };
   try {
-    speechSynthesis.cancel();
-    const t = zhClean(text); if (!t) return;
-    const u = new SpeechSynthesisUtterance(slow ? slowText(t) : t);
-    u.lang = 'zh-CN'; if (TTS.voice) u.voice = TTS.voice;
-    u.rate = slow ? 0.5 : P.settings.rate;
-    speechSynthesis.speak(u);
-  } catch (e) { /* ignore */ }
+    if (speechSynthesis.speaking || speechSynthesis.pending) { speechSynthesis.cancel(); setTimeout(go, 80); } else go();
+  } catch (e) { fallback(); }
 }
 
 /* ================= icons ================= */
@@ -3732,6 +3768,19 @@ function mountFallback(pad, text, size, msg, hidden) {
   if (msg) msg.textContent = t('Порядок черт сейчас не загрузился. Обведите иероглиф по бледному образцу.');
 }
 
+// Settings → «Голос»: added after the sheet is drawn, so the sheet's own text keeps its translation key.
+function voiceSettings() {
+  const f = document.querySelector('#sheetbg [data-k="rate"]'); if (!f) return;
+  const s = P.settings.voice || 'auto', m = voiceMode();
+  const chip = (v, ru, en) => `<button class="chip" data-act="set" data-k="voice" data-v="${v}" aria-pressed="${s === v}">${LX(ru, en)}</button>`;
+  const vn = TTS.voice ? `${TTS.voice.name} (${TTS.voice.lang})` : '';
+  const now = m === 'rec' ? (REC.err && !REC.used ? LX('записи, но они не загрузились — нужен интернет', 'recordings, but they did not load — the internet is needed') : LX('записи', 'recordings'))
+    : m === 'tts' ? LX('голос телефона', 'the phone\'s voice') + (vn ? ' — ' + vn : '') : LX('голос телефона; если он промолчит, включатся записи', 'the phone\'s voice; if it stays silent, the recordings take over');
+  f.closest('.field').insertAdjacentHTML('afterend', `<div class="field" data-voicef><span>${LX('Голос', 'Voice')}</span>
+    <div class="chips">${chip('auto', 'Авто', 'Auto')}${chip('tts', 'Телефона', 'Phone')}${chip('rec', 'Записи', 'Recordings')}</div>
+    <small>${LX('Сейчас: ', 'Now: ')}${esc(now)}.<br>${LX('«Авто» — голос телефона, а если его нет или он молчит (так бывает на Android) — записи в приложении. Скорость озвучки меняет только голос телефона; у записей для медленного произношения — кнопка «Медленно».', '“Auto” — the phone\'s voice, and when there is none or it stays silent (this happens on Android) — the recordings in the app. The speech speed changes only the phone\'s voice; for the recordings use the “Slowly” button.')}</small>
+    <div class="row"><button class="btn ghost small" data-say="你好！我们开始上课吧。">${LX('Проверить звук', 'Test the sound')}</button></div></div>`);
+}
 function settingsSheet() {
   const s = P.settings;
   const opt = (k, v, label) => `<button class="chip" data-act="set" data-k="${k}" data-v="${v}" aria-pressed="${String(s[k]) === String(v)}">${label}</button>`;
@@ -3744,11 +3793,12 @@ function settingsSheet() {
     <div class="field"><span>Пиньинь над иероглифами</span><div class="chips">${opt('pinyin', 'ladder', t('Лесенкой'))}${opt('pinyin', 'always', t('Всегда'))}${opt('pinyin', 'never', t('Не показывать'))}</div><small>«Лесенкой»: пиньинь слов урока N виден, пока вы проходите уроки N…N+${PY_STEP}, и пропадает с урока N+${PY_STEP + 1}. Сейчас вы на уроке ${Math.min(10, frontier())}. Кнопка «pīnyīn» вверху экрана включает пиньинь везде в любой момент; нажатие на иероглиф вне кнопок показывает пиньинь только у него.</small></div>
     <div class="field"><span>Язык · Language</span><div class="chips"><button class="chip" data-act="lang" aria-pressed="${LANG === 'ru'}" ${LANG === 'ru' ? 'disabled' : ''}>Русский</button><button class="chip" data-act="lang" aria-pressed="${LANG === 'en'}" ${LANG === 'en' ? 'disabled' : ''}>English</button></div></div>
     <div class="field"><span>Цвет тонов</span><div class="chips">${opt('tones', 'true', t('Включён'))}${opt('tones', 'false', t('Выключен'))}</div><small><span class="t1">1-й</span> · <span class="t2">2-й</span> · <span class="t3">3-й</span> · <span class="t4">4-й</span> · <span class="t5">лёгкий</span></small></div>
-    <div class="field"><span>Скорость озвучки</span><div class="chips">${opt('rate', 0.6, t('Медленно'))}${opt('rate', 0.8, t('Средне'))}${opt('rate', 1, t('Обычно'))}</div>${TTS.ok ? (!TTS.missing ? '' : t('<small>Китайский голос не найден. На iPhone: Настройки → Универсальный доступ → Устный контент → Голоса → Китайский.</small>')) : t('<small>Этот браузер не умеет озвучивать текст.</small>')}</div>
+    <div class="field"><span>Скорость озвучки</span><div class="chips">${opt('rate', 0.6, t('Медленно'))}${opt('rate', 0.8, t('Средне'))}${opt('rate', 1, t('Обычно'))}</div>${(TTS.ok && !TTS.missing) || !REC.err ? '' : TTS.ok ? (!TTS.missing ? '' : t('<small>Китайский голос не найден. На iPhone: Настройки → Универсальный доступ → Устный контент → Голоса → Китайский.</small>')) : t('<small>Этот браузер не умеет озвучивать текст.</small>')}</div>
     <div class="field"><span>Прогресс</span>${syncHTML()}
       <div data-reset><button class="btn ghost small" data-act="reset1">Сбросить весь прогресс</button></div></div>
   `);
   faqSettings();
+  voiceSettings();
 }
 
 /* ================= sessions ================= */
@@ -3843,7 +3893,7 @@ function startSession(queue, meta) {
 function endSession() {
   const el = $('#session'); if (el) el.remove();
   document.body.style.overflow = '';
-  try { speechSynthesis.cancel(); } catch (e) { /* ignore */ }
+  sayStop();
   S = null; render();
 }
 function toastSheet(title, text) { openSheet(T`<h2>${esc(title)}</h2><p class="muted">${esc(text)}</p><button class="btn primary block" data-act="closesheet">Понятно</button>`); }
@@ -3998,7 +4048,7 @@ function renderListen(w) {
   const correct = items.findIndex(x => x.id === w.id);
   const short = !toMeaning && Math.max(...items.map(x => [...x.html].length)) <= 3;
   $('#sbody').innerHTML = T`<div class="s-kind">${toMeaning ? t('Послушайте: что это значит?') : t('Послушайте: какое это слово?')}</div>
-    <div class="prompt"><button class="playbig" data-say="${esc(w.hz)}" aria-label="Прослушать ещё раз">${I.sound}</button><button class="slow" data-say-slow="${esc(w.hz)}">Медленнее</button>${!TTS.ok || TTS.missing ? t('<span class="hint">Китайский голос не найден. Его можно включить в настройках iPhone, подробности — в настройках приложения.</span>') : ''}</div>
+    <div class="prompt"><button class="playbig" data-say="${esc(w.hz)}" aria-label="Прослушать ещё раз">${I.sound}</button><button class="slow" data-say-slow="${esc(w.hz)}">Медленнее</button>${(!TTS.ok || TTS.missing) && REC.err ? t('<span class="hint">Китайский голос не найден. Его можно включить в настройках iPhone, подробности — в настройках приложения.</span>') : ''}</div>
     <div class="opts ${short ? 'hz4' : ''}" data-opts>${optionButtons(items, toMeaning ? '' : 'hzopt')}</div>`;
   if (!toMeaning && !short) $('[data-opts]').querySelectorAll('.hzopt').forEach(b => { b.style.fontSize = '26px'; b.style.minHeight = '64px'; });
   bindOptions($('[data-opts]'), items, correct, ok => { answer(ok); feedback(ok, w); });
@@ -4174,18 +4224,11 @@ const sample = (a, n) => shuffle(a.slice()).slice(0, n);
 const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 
 /* ---------- speech helpers ---------- */
-function sayQueue(items) { // items: [{text, mute}]
-  if (!TTS.ok) return;
-  try {
-    speechSynthesis.cancel();
-    items.forEach(it => {
-      const u = new SpeechSynthesisUtterance(String(it.text).replace(/[a-zA-Z…]/g, ''));
-      u.lang = 'zh-CN'; if (TTS.voice) u.voice = TTS.voice;
-      u.rate = it.mute ? Math.max(0.5, P.settings.rate * 0.7) : P.settings.rate;
-      if (it.mute) u.volume = 0;
-      speechSynthesis.speak(u);
-    });
-  } catch (e) { /* ignore */ }
+function sayQueue(items) { // items: [{text, mute}] — one after another; a mute one is a pause as long as the text
+  items = items.map(it => ({ text: zhClean(it.text), mute: !!it.mute })).filter(it => it.text);
+  if (!items.length) return;
+  if (voiceMode() === 'rec') { recQueue(items); return; }
+  ttsSpeak(items.map(it => ({ text: it.text, mute: it.mute, rate: it.mute ? Math.max(0.5, P.settings.rate * 0.7) : P.settings.rate })), () => recQueue(items));
 }
 
 /* ---------- word rows shared ---------- */
@@ -5364,6 +5407,94 @@ function hanziHTML(book, n) {
       : `<p class="muted">${LX('Новых иероглифов в этом уроке нет — все уже были раньше.', 'No new characters in this lesson — all of them appeared earlier.')}</p>`}`;
 }
 
+/* ================= recorded voice (dist/audio — scripts/build_audio.py) =================
+   Used when the phone cannot speak Chinese: no speechSynthesis or no Chinese voice (the Claude app on Android, phones
+   without Google services…), or the speech never starts; or when «Записи» is chosen in the settings.
+   index.json: key (Han characters and digits of the text) → [pack, byte offset, byte length]; each clip is stand-alone MP3. */
+const REC_BASE = window.ZH_AUDIO || 'audio/';
+const REC = { idx: null, idxP: null, packs: {}, bufs: new Map(), ctx: null, src: [], gen: 0 };
+const recKey = s => String(s).replace(/[^㐀-鿿0-9]/g, '');
+function recCtx() {
+  try {
+    if (!REC.ctx) { const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null; REC.ctx = new AC(); }
+    if (REC.ctx.state === 'suspended') REC.ctx.resume().catch(() => {});
+  } catch (e) { return null; }
+  return REC.ctx;
+}
+function recIndex() {
+  if (location.protocol === 'file:') { REC.err = 'file'; return Promise.reject(new Error('file')); } // a page opened from disk: no recordings
+  if (!REC.idxP) REC.idxP = fetch(REC_BASE + 'index.json').then(r => (r.ok ? r.json() : Promise.reject(new Error('index ' + r.status))))
+    .then(j => { REC.idx = j; return j; })
+    .catch(e => { REC.err = String(e); setTimeout(() => { REC.idxP = null; }, 30000); throw e; }); // try again in a while
+  return REC.idxP;
+}
+function recPack(i) {
+  const name = REC.idx.packs[i];
+  if (!REC.packs[name]) REC.packs[name] = fetch(REC_BASE + name).then(r => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(name + ' ' + r.status))))
+    .catch(e => { delete REC.packs[name]; throw e; });
+  return REC.packs[name];
+}
+async function recBuf(key) {
+  if (REC.bufs.has(key)) return REC.bufs.get(key);
+  const e = REC.idx.k[key]; if (!e) return null;
+  const ab = await recPack(e[0]), ctx = recCtx(); if (!ctx) return null;
+  const b = await new Promise((res, rej) => { const p = ctx.decodeAudioData(ab.slice(e[1], e[1] + e[2]), res, rej); if (p && p.catch) p.catch(rej); });
+  if (REC.bufs.size > 400) REC.bufs.delete(REC.bufs.keys().next().value);
+  REC.bufs.set(key, b);
+  return b;
+}
+// The clips for a text: the whole text when it was recorded, else the longest recorded pieces —
+// words, numbers, dates («十月», «二十八号»), short phrases — else single characters.
+function recParts(t) {
+  const k = recKey(t); if (!k) return [];
+  if (REC.idx.k[k]) return [k];
+  const out = [];
+  String(t).split(/[^㐀-鿿0-9]+/).forEach(run => {
+    for (let i = 0; i < run.length;) {
+      let j = Math.min(run.length, i + 12);
+      while (j > i + 1 && !REC.idx.k[run.slice(i, j)]) j--;
+      if (REC.idx.k[run.slice(i, j)]) out.push(run.slice(i, j));
+      i = j;
+    }
+  });
+  return out;
+}
+function recStop() { REC.gen++; REC.src.forEach(s => { try { s.stop(); } catch (e) { /* ignore */ } }); REC.src = []; }
+// groups: [[text, pause after]] — plays one after another; resolves false when the recordings cannot be used here
+async function recPlay(groups) {
+  recStop();
+  const g = REC.gen, ctx = recCtx(); if (!ctx) return false;
+  try { await recIndex(); } catch (e) { return false; }
+  const seq = [];
+  try {
+    for (const [text, pause, mute] of groups) {
+      const parts = mute ? [] : recParts(text), bs = [];
+      for (const k of parts) { const b = await recBuf(k); if (b) bs.push(b); }
+      seq.push([bs, pause, mute ? 0.32 * [...recKey(text)].length : 0]);
+      if (g !== REC.gen) return true; // a newer text was asked for
+    }
+  } catch (e) { REC.err = String(e); return false; }
+  if (!seq.some(s => s[0].length)) return false;
+  let at = ctx.currentTime + 0.03;
+  seq.forEach(([bs, pause, gap]) => {
+    bs.forEach((b, i) => {
+      const s = ctx.createBufferSource(); s.buffer = b; s.connect(ctx.destination); s.start(at); REC.src.push(s);
+      at += b.duration - (i < bs.length - 1 ? 0.1 : 0); // words of one text follow closely
+    });
+    at += gap + pause;
+  });
+  REC.used = true;
+  return true;
+}
+// Same as say(): slow = one character twice, a word syllable by syllable then whole, a phrase word by word.
+function recSay(t, slow) {
+  if (!slow) return recPlay([[t, 0]]);
+  return recPlay(slowText(t).split(/[，。]/).filter(Boolean).map(x => [x, 0.38]));
+}
+function recQueue(items) { return recPlay(items.map(it => [String(it.text), 0.25, !!it.mute])); }
+// Fetch the words and characters ahead, so the first tap plays at once.
+function recWarm() { recIndex().then(() => recPack(0)).catch(() => {}); }
+
 /* ================= rules & FAQ (свод правил) ================= */
 // Every answer below is checked against the code that does the counting (grade, level, dueList, startDaily, canWrite, startLessonTest…).
 // When a rule in the code changes, change the answer here too. Russian and English are written side by side.
@@ -5478,9 +5609,11 @@ function faqData() {
         `<p>The colour shows the tone: <span class="t1">1st</span>, <span class="t2">2nd</span>, <span class="t3">3rd</span>, <span class="t4">4th</span>, <span class="t5">neutral</span>. You can switch the colours off in settings (“Tone colours”).</p>`) },
       { id: 'slow', q: LX('Как работает «Медленно»?', 'How does “Slowly” work?'), a: LX(
         `<p>Один иероглиф звучит дважды; слово — по слогам, потом целиком; фраза — по словам. Это сделано паузами, потому что на iPhone скорость голоса иногда не меняется. Скорость обычной озвучки — в настройках.</p>
-        <p>Голос — встроенный в телефон. Если китайского голоса нет: на iPhone Настройки → Универсальный доступ → Устный контент → Голоса → Китайский.</p>`,
+        <p>Голос — встроенный в телефон. Если китайского голоса нет или телефон молчит (так бывает на Android: в приложении Claude, на телефонах без сервисов Google), тренажёр сам переключается на записи — все слова, иероглифы и фразы уроков 1–10 записаны заранее. Выбрать вручную: Настройки → «Голос»: «Авто», «Телефона» или «Записи»; там же кнопка «Проверить звук». У записей скорость не меняется — для медленного произношения есть кнопка «Медленно».</p>
+        <p>Включить китайский голос на iPhone: Настройки → Универсальный доступ → Устный контент → Голоса → Китайский.</p>`,
         `<p>A single character is said twice; a word syllable by syllable, then whole; a phrase word by word. It works with pauses because on iPhone the voice speed sometimes doesn't change. The normal speech speed is in settings.</p>
-        <p>The voice is the one built into your phone. If there is no Chinese voice: on iPhone, Settings → Accessibility → Spoken Content → Voices → Chinese.</p>`) }
+        <p>The voice is the one built into your phone. If there is no Chinese voice or the phone stays silent (this happens on Android: in the Claude app, on phones without Google services), the trainer switches to recordings by itself — all words, characters and phrases of lessons 1–10 are recorded in advance. To choose by hand: Settings → “Voice”: “Auto”, “Phone” or “Recordings”; there is also a “Test the sound” button. The recordings have one speed — use “Slowly” for slow pronunciation.</p>
+        <p>To add the Chinese voice on iPhone: Settings → Accessibility → Spoken Content → Voices → Chinese.</p>`) }
     ] },
     { sec: LX('Проверка урока и учебник', 'Lesson test and the textbook'), items: [
       { id: 'test', q: LX('Как работает проверка урока?', 'How does the lesson test work?'), a: LX(
@@ -6354,7 +6487,7 @@ function micRecord(o) {
       finish();
     };
     MIC.live = { stop: stopAll };
-    try { speechSynthesis.cancel(); } catch (e) { /* ignore */ }
+    sayStop();
     const startRec = () => {
       if (!micRecCan()) return;
       try {
@@ -7156,7 +7289,7 @@ document.addEventListener('click', e => {
     case 'setgroup': P.settings.group = +a.dataset.n; P.settings.groupSet = true; touch(); render(); break;
     case 'set': {
       const k = a.dataset.k; let v = a.dataset.v;
-      if (k === 'tones' || k === 'books') v = v === 'true'; else if (k !== 'pinyin') v = +v;
+      if (k === 'tones' || k === 'books') v = v === 'true'; else if (k !== 'pinyin' && k !== 'voice') v = +v;
       P.settings[k] = v; if (k === 'group') P.settings.groupSet = true;
       touch(); const st = $('.sheet') ? $('.sheet').scrollTop : 0; settingsSheet(); if ($('.sheet')) $('.sheet').scrollTop = st; render(); break;
     }
@@ -7192,7 +7325,7 @@ document.getElementById('tabbar').innerHTML = T`<div class="in">
   <button data-act="tab" data-tab="lessons">${I.book}<span>Уроки</span></button>
   <button data-act="tab" data-tab="train">${I.brush}<span>Тренировка</span></button>
   <button data-act="tab" data-tab="progress">${I.chart}<span>Прогресс</span></button></div>`;
-if (/zhtest/.test(location.hash)) window.__zh = { get S() { return S; }, get P() { return P; }, WBY, BBY, STROKES, slowText, runSyl, wordSheet, closeSheet, zhText, DATA, BK };
+if (/zhtest/.test(location.hash)) window.__zh = { get S() { return S; }, get P() { return P; }, WBY, BBY, STROKES, slowText, runSyl, wordSheet, closeSheet, zhText, DATA, BK, say, sayQueue, voiceMode, TTS, REC };
 if (EN) document.getElementById('tabbar').setAttribute('aria-label', 'Sections');
 if (PYOBS) PYOBS.observe(document.body, { childList: true, subtree: true });
 render();
